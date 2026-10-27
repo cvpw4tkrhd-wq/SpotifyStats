@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0d0b17">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SpotifyStats">
 <title>SpotifyStats</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
@@ -21,8 +25,9 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 var(--body);min-height:100vh;
-  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+html{background:var(--bg)}
+body{margin:0;color:var(--text);font:15px/1.5 var(--body);min-height:100vh;
+  padding:0 env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
 body::before{content:"";position:fixed;inset:0;z-index:-1;
   background:
    radial-gradient(1100px 620px at 8% -8%,color-mix(in srgb,var(--accent) 30%,transparent),transparent 65%),
@@ -30,9 +35,19 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;
 button,select{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.wrap{max-width:1320px;margin:0 auto;padding:16px 16px 56px}
+.wrap{max-width:1320px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 16px 56px}
 .muted{color:var(--muted)}
 section{margin-top:14px}
+
+/* fade under the status bar / Dynamic Island (touch devices only) */
+.scrim{display:none}
+@media (hover:none) and (pointer:coarse){
+  .scrim{display:block;position:fixed;top:0;left:0;right:0;z-index:50;pointer-events:none;
+    height:calc(env(safe-area-inset-top,0px) + 22px);
+    background:linear-gradient(to bottom,rgba(13,11,23,.62) 0%,rgba(13,11,23,.38) 55%,rgba(13,11,23,0) 100%);
+    -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+    -webkit-mask-image:linear-gradient(to bottom,#000 55%,transparent 100%);mask-image:linear-gradient(to bottom,#000 55%,transparent 100%)}
+}
 
 /* top bar */
 .top{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
@@ -145,6 +160,7 @@ footer{margin-top:36px;color:var(--muted);font-size:13px}
 </style>
 </head>
 <body>
+<div class="scrim" aria-hidden="true"></div>
 <div class="wrap" id="app" hidden>
   <header class="top">
     <div class="brand">SpotifyStats</div>
