@@ -30,6 +30,7 @@ body{margin:0;color:var(--text);font:15px/1.5 var(--body);min-height:100vh;
   padding:0 env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
 body::before{content:"";position:fixed;inset:0;z-index:-1;
   background:
+   linear-gradient(to bottom,#0d0b17 0,rgba(13,11,23,.85) 40px,rgba(13,11,23,0) 190px),
    radial-gradient(1100px 620px at 8% -8%,color-mix(in srgb,var(--accent) 30%,transparent),transparent 65%),
    radial-gradient(900px 560px at 105% 0%,color-mix(in srgb,var(--accent2) 26%,transparent),transparent 62%)}
 [hidden]{display:none!important}
@@ -256,7 +257,7 @@ footer{margin-top:36px;color:var(--muted);font-size:13px}
 </div>
 
 <script>
-const APP_VERSION = '1.2.1'; // bump this when index.html changes
+const APP_VERSION = '1.2.2'; // bump this when index.html changes
 const $ = (s) => document.querySelector(s);
 const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -533,7 +534,9 @@ function diag() {
   const p = document.createElement('div');
   p.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top,0px);visibility:hidden';
   document.body.append(p); const inset = p.offsetHeight; p.remove();
-  return { standalone, inset, text: `${standalone ? 'Home Screen app' : 'Browser'}, top inset ${inset} px` };
+  const gap = standalone ? Math.max(0, Math.max(screen.height, screen.width) - Math.max(innerHeight, innerWidth)) : 0;
+  const note = standalone && inset === 0 && gap > 20 ? `, iOS draws a ${gap} px bar above the page` : '';
+  return { standalone, inset, text: `${standalone ? 'Home Screen app' : 'Browser'}, top inset ${inset} px${note}` };
 }
 let toastTimer;
 function toast(msg, ms = 3000) {
