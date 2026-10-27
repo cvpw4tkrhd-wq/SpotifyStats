@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>SpotifyStats – connect Spotify</title>
+<style>
+  :root{color-scheme:dark}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;
+    font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#eef0f7;
+    background:radial-gradient(900px 500px at 15% 0%,#2dd4bf33,transparent 60%),radial-gradient(800px 500px at 100% 100%,#9333ea33,transparent 60%),#0d0b17}
+  main{max-width:480px;width:100%;background:#161325;border:1px solid #2a2540;border-radius:24px;padding:28px}
+  h1{margin:0 0 8px;font-size:26px}
+  p{color:#a9a3c4;margin:0 0 20px}
+  button{font:inherit;font-weight:700;border:0;border-radius:999px;padding:14px 26px;cursor:pointer;color:#06210f;background:#1ed760;width:100%}
+  button:focus-visible{outline:3px solid #fff;outline-offset:3px}
+  small{display:block;margin-top:16px;color:#7d7799}
+</style>
+</head>
+<body>
+<main>
+  <h1>Connect Spotify</h1>
+  <p>Log in once so the collector can read your recently played tracks. You will get a token to save as a secret in GitHub. The page never sees your Spotify password.</p>
+  <button id="go">Log in with Spotify</button>
+  <small>Permission requested: read your recently played tracks (nothing else).</small>
+</main>
+<script>
+const CLIENT_ID = 'fc835bb8cfe7435288346274a4a67175';
+const REDIRECT  = 'https://cvpw4tkrhd-wq.github.io/SpotifyStats/callback.html';
+const SCOPE     = 'user-read-recently-played';
+
+function rand(n){const a=new Uint8Array(n);crypto.getRandomValues(a);return Array.from(a,b=>b.toString(16).padStart(2,'0')).join('')}
+async function challenge(v){
+  const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v));
+  return btoa(String.fromCharCode(...new Uint8Array(d))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+document.getElementById('go').onclick = async () => {
+  const verifier = rand(32);           // 64 hex chars
+  const state = rand(8);
+  localStorage.setItem('sp_verifier', verifier);
+  localStorage.setItem('sp_state', state);
+  const q = new URLSearchParams({
+    response_type:'code', client_id:CLIENT_ID, scope:SCOPE, redirect_uri:REDIRECT,
+    code_challenge_method:'S256', code_challenge: await challenge(verifier), state
+  });
+  location.href = 'https://accounts.spotify.com/authorize?' + q;
+};
+</script>
+</body>
+</html>

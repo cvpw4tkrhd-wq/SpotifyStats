@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>SpotifyStats – token</title>
+<style>
+  :root{color-scheme:dark}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;
+    font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#eef0f7;
+    background:radial-gradient(900px 500px at 15% 0%,#2dd4bf33,transparent 60%),radial-gradient(800px 500px at 100% 100%,#9333ea33,transparent 60%),#0d0b17}
+  main{max-width:560px;width:100%;background:#161325;border:1px solid #2a2540;border-radius:24px;padding:28px}
+  h1{margin:0 0 8px;font-size:24px}
+  p{color:#a9a3c4;margin:0 0 16px}
+  textarea{width:100%;height:120px;border-radius:14px;border:1px solid #2a2540;background:#0d0b17;color:#eef0f7;padding:12px;font:13px/1.4 ui-monospace,Menlo,Consolas,monospace;resize:none}
+  button{font:inherit;font-weight:700;border:0;border-radius:999px;padding:12px 24px;cursor:pointer;color:#06210f;background:#1ed760;margin-top:12px}
+  button:focus-visible{outline:3px solid #fff;outline-offset:3px}
+  .warn{background:#3a1f2b;border:1px solid #6b2c43;border-radius:14px;padding:12px 14px;color:#ffc2d4;margin-top:16px;font-size:14px}
+  .err{color:#ff9aa8}
+  ol{color:#a9a3c4;padding-left:20px;margin:16px 0 0}
+</style>
+</head>
+<body>
+<main id="m"><h1>Working…</h1><p>Getting your token from Spotify.</p></main>
+<script>
+const CLIENT_ID = 'fc835bb8cfe7435288346274a4a67175';
+const REDIRECT  = 'https://cvpw4tkrhd-wq.github.io/SpotifyStats/callback.html';
+const m = document.getElementById('m');
+const fail = (msg) => { m.innerHTML = '<h1>Something went wrong</h1><p class="err"></p><p><a style="color:#1ed760" href="login.html">Try again</a></p>'; m.querySelector('.err').textContent = msg; };
+
+(async () => {
+  const q = new URLSearchParams(location.search);
+  if (q.get('error')) return fail('Spotify said: ' + q.get('error'));
+  const code = q.get('code');
+  if (!code) return fail('No login code found. Start from login.html.');
+  if (q.get('state') !== localStorage.getItem('sp_state')) return fail('Login check failed (state mismatch). Start again from login.html.');
+  const verifier = localStorage.getItem('sp_verifier');
+  if (!verifier) return fail('Missing login data. Open login.html in the same browser and try again.');
+
+  const r = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type:'authorization_code', code, redirect_uri:REDIRECT, client_id:CLIENT_ID, code_verifier:verifier })
+  });
+  const j = await r.json();
+  if (!r.ok || !j.refresh_token) return fail((j.error_description || j.error || 'Token request failed') + ' (' + r.status + ')');
+  localStorage.removeItem('sp_verifier'); localStorage.removeItem('sp_state');
+  history.replaceState(null, '', 'callback.html');
+
+  m.innerHTML = `
+    <h1>Connected</h1>
+    <p>Copy this refresh token and save it in GitHub as a secret named <b>SPOTIFY_REFRESH_TOKEN</b>.</p>
+    <textarea id="t" readonly></textarea>
+    <button id="c">Copy token</button>
+    <div class="warn">Treat this like a password. Do not paste it into a file in the repo or share it with anyone.</div>
+    <ol>
+      <li>Repo → Settings → Secrets and variables → Actions → New repository secret</li>
+      <li>Name <b>SPOTIFY_REFRESH_TOKEN</b>, paste the token</li>
+      <li>Add <b>SPOTIFY_CLIENT_ID</b> with the value ${CLIENT_ID}</li>
+    </ol>`;
+  const t = document.getElementById('t');
+  t.value = j.refresh_token;
+  document.getElementById('c').onclick = async (e) => {
+    try { await navigator.clipboard.writeText(t.value); e.target.textContent = 'Copied'; }
+    catch { t.select(); e.target.textContent = 'Select and copy manually'; }
+  };
+})().catch((e) => fail(e.message));
+</script>
+</body>
+</html>

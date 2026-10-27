@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d0b17">
+<title>SpotifyStats</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#0d0b17;--card:#161325;--card2:#1d1a30;--line:#2a2540;--text:#eef0f7;--muted:#a9a3c4;
+  --accent:#2dd4bf;--accent2:#38bdf8;--up:#4ade80;--down:#fb7185;
+  --head:'Bricolage Grotesque',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --body:'Instrument Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 var(--body);min-height:100vh;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+body::before{content:"";position:fixed;inset:0;z-index:-1;
+  background:
+   radial-gradient(1100px 620px at 8% -8%,color-mix(in srgb,var(--accent) 30%,transparent),transparent 65%),
+   radial-gradient(900px 560px at 105% 0%,color-mix(in srgb,var(--accent2) 26%,transparent),transparent 62%)}
+button,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1320px;margin:0 auto;padding:16px 16px 56px}
+.muted{color:var(--muted)}
+section{margin-top:14px}
+
+/* top bar */
+.top{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.brand{font:800 20px var(--head);letter-spacing:-.01em}
+.ctrl{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.seg{display:flex;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:3px}
+.seg button{border:0;background:none;padding:7px 16px;border-radius:999px;font-weight:600;color:var(--muted)}
+.seg button.on{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#0d0b17}
+.pick{display:flex;align-items:center;gap:6px}
+.pick button{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--card);font-size:20px;line-height:1}
+.pick select{height:36px;border-radius:999px;border:1px solid var(--line);background:var(--card);padding:0 14px;min-width:150px}
+.demo{margin-top:12px;border-radius:14px;padding:10px 14px;background:#3a2f12;border:1px solid #6b5a1e;color:#ffe08a;font-size:14px}
+
+/* hero */
+.hero{margin-top:26px}
+.hero h1{font:800 clamp(44px,9vw,104px)/.92 var(--head);letter-spacing:-.035em;margin:0}
+.moodrow{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;margin-top:16px}
+.pill{display:inline-block;padding:7px 16px;border-radius:999px;font:700 15px var(--head)}
+.ribbonbox{margin-top:22px}
+.ribbon{display:flex;align-items:flex-end;gap:3px;height:110px}
+.ribbon button{flex:1;min-width:3px;border:0;border-radius:6px 6px 3px 3px;padding:0;opacity:.45}
+.ribbon button.sel,.ribbon.allsel button{opacity:1}
+.ribbon button:hover{opacity:.85}
+.ribbon-labels{display:flex;gap:3px;margin-top:6px;font-size:11px;color:var(--muted)}
+.ribbon-labels span{flex:1;white-space:nowrap;min-width:3px}
+.ribbon-note{font-size:13px;color:var(--muted);margin-top:4px}
+
+/* cards */
+.card{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:20px}
+.card h2{font:700 18px/1.2 var(--head);margin:0 0 4px}
+.card .sub{color:var(--muted);font-size:13px;margin:0 0 14px}
+.sec{font:800 clamp(24px,3.4vw,34px)/1.1 var(--head);letter-spacing:-.02em;margin:40px 0 2px}
+.secp{color:var(--muted);margin:0 0 4px;max-width:62ch}
+.grid{display:grid;gap:14px}
+.grid>*{min-width:0}
+.g4{grid-template-columns:repeat(4,1fr)}
+.g21{grid-template-columns:2fr 1fr}
+.g12{grid-template-columns:1fr 1fr}
+
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:16px 18px}
+.kpi .l{color:var(--muted);font-size:13px}
+.kpi .v{font:800 clamp(24px,3vw,34px)/1.1 var(--head);margin-top:4px;overflow-wrap:anywhere}
+.kpi .d{font-size:13px;font-weight:600;margin-top:4px}
+.kpi .d.up{color:var(--up)}.kpi .d.dn{color:var(--down)}.kpi .d.flat,.kpi .d.note{color:var(--muted);font-weight:400}
+
+/* artist of the month */
+.strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(138px,1fr));gap:10px}
+.tile{border:0;border-radius:18px;padding:12px 14px;text-align:left;display:flex;flex-direction:column;gap:2px;min-height:96px;position:relative}
+.tile small{font-weight:600;opacity:.8}
+.tile b{font:700 16px/1.15 var(--head);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tile span{font-size:12px;opacity:.8;margin-top:auto}
+.tile.sel{outline:3px solid #fff;outline-offset:2px}
+
+/* ranked lists */
+.row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;column-gap:10px;align-items:center;padding:7px 0}
+.rk{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font:700 13px var(--head);background:color-mix(in srgb,var(--accent) 22%,transparent)}
+.row:first-child .rk{background:var(--accent);color:#0d0b17}
+.nm b,.nm small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nm b{font-weight:600}.nm small{color:var(--muted);font-size:12px}
+.val{font-weight:600;font-size:13px;color:var(--muted)}
+.bar{grid-column:2/4;height:6px;border-radius:99px;background:#ffffff12;margin-top:6px}
+.bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+
+/* charts */
+.chartbox{position:relative;height:290px;min-width:0}
+.chartbox.tall{height:380px}
+.card{min-width:0}
+
+/* churn */
+.big{font:800 54px/1 var(--head)}
+.big span{font-size:20px;color:var(--muted);font-weight:600}
+.dots{display:flex;flex-wrap:wrap;gap:5px;margin:14px 0}
+.dots i{width:14px;height:14px;border-radius:50%;background:#ffffff1a}
+.dots i.k{background:linear-gradient(135deg,var(--accent),var(--accent2))}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 14px}
+.chips span{padding:4px 11px;border-radius:999px;font-size:13px;background:color-mix(in srgb,var(--accent) 18%,transparent)}
+.chips.out span{background:#ffffff12;color:var(--muted)}
+.card h3{font:600 13px var(--body);color:var(--muted);margin:14px 0 2px}
+
+/* mood themes */
+.theme{display:grid;grid-template-columns:34px 92px 1fr 40px;gap:10px;align-items:center;width:100%;text-align:left;padding:7px 8px;border-radius:14px;border:1px solid transparent;background:none}
+.theme.on{border-color:var(--accent);background:var(--card2)}
+.theme .sw{width:34px;height:34px;border-radius:12px}
+.theme .tn{font-weight:600}
+.tbar{height:8px;border-radius:99px;background:#ffffff12;overflow:hidden}
+.tbar i{display:block;height:100%;border-radius:99px}
+.tp{font-size:13px;color:var(--muted);text-align:right}
+
+/* habits */
+.heat{display:grid;grid-template-columns:34px repeat(24,minmax(0,1fr));gap:3px}
+.heat i{aspect-ratio:1;border-radius:4px;background:color-mix(in srgb,var(--accent) var(--p,6%),#ffffff10)}
+.heat .hl,.heat .dl{font-size:11px;color:var(--muted);display:flex;align-items:center}
+.heat .hl{justify-content:flex-start;white-space:nowrap;overflow:visible}
+.calwrap{overflow-x:auto;padding-bottom:6px}
+.cal{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,var(--cs,13px));grid-auto-columns:var(--cs,13px);gap:3px;width:max-content}
+.cal.big{--cs:34px}
+.cal i{border-radius:5px;background:color-mix(in srgb,var(--accent) var(--p,0%),#ffffff10);font-style:normal;font-size:11px;display:grid;place-items:center}
+.cal i.empty{background:none}
+
+/* highlights */
+.hl-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.hl-list li{padding:12px 16px;border-radius:16px;background:var(--card2);border-left:4px solid var(--accent)}
+.hl-list small{display:block;color:var(--muted)}
+
+footer{margin-top:36px;color:var(--muted);font-size:13px}
+.empty{padding:40px 20px;text-align:center}
+
+@media (max-width:1000px){.g4{grid-template-columns:repeat(2,1fr)}.g21,.g12{grid-template-columns:1fr}}
+@media (max-width:560px){.g4.lists{grid-template-columns:1fr}.theme{grid-template-columns:30px 80px 1fr 38px}.chartbox{height:260px}.pick select{min-width:120px}}
+</style>
+</head>
+<body>
+<div class="wrap" id="app" hidden>
+  <header class="top">
+    <div class="brand">SpotifyStats</div>
+    <div class="ctrl">
+      <div class="seg" id="seg" role="group" aria-label="Period type"></div>
+      <div class="pick" id="pick">
+        <button id="older" aria-label="Previous period">‹</button>
+        <select id="sel" aria-label="Choose period"></select>
+        <button id="newer" aria-label="Next period">›</button>
+      </div>
+    </div>
+  </header>
+  <div class="demo" id="demo" hidden>This is demo data. Your own listening replaces it after the first collector run.</div>
+
+  <div class="hero">
+    <h1 id="title"></h1>
+    <div class="moodrow"><span class="pill" id="pill"></span><span class="muted" id="mix"></span></div>
+    <p class="ribbon-note" id="progress" hidden></p>
+    <div class="ribbonbox">
+      <div class="ribbon" id="ribbon" role="group" aria-label="Every month: height is hours listened, color is the dominant mood"></div>
+      <div class="ribbon-labels" id="ribbonLabels" aria-hidden="true"></div>
+      <p class="ribbon-note">Each bar is a month. Height shows hours listened, color shows its dominant mood. Tap a bar to open that month.</p>
+    </div>
+  </div>
+
+  <section class="grid g4" id="kpis"></section>
+
+  <section class="card">
+    <h2 id="stripTitle"></h2>
+    <p class="sub">Tap a tile to open that period.</p>
+    <div class="strip" id="strip"></div>
+  </section>
+
+  <h2 class="sec">Top lists</h2>
+  <section class="grid g4 lists">
+    <div class="card"><h2>Artists</h2><div id="lArtists"></div></div>
+    <div class="card"><h2>Tracks</h2><div id="lTracks"></div></div>
+    <div class="card"><h2>Albums</h2><div id="lAlbums"></div></div>
+    <div class="card"><h2>Genres</h2><div id="lGenres"></div></div>
+  </section>
+
+  <h2 class="sec">How your taste changes</h2>
+  <p class="secp">Genre mix per month, and how much your top artists change from one period to the next.</p>
+  <section class="grid g21">
+    <div class="card"><h2>Genre mix over time</h2><p class="sub">Share of listening time per month. Genres come from Last.fm tags on each artist.</p><div class="chartbox"><canvas id="cGenre"></canvas></div></div>
+    <div class="card"><h2>Artist churn</h2><p class="sub">Your top 20 compared with the period before.</p><div id="churn"></div></div>
+  </section>
+  <section class="card">
+    <h2>Variety and taste shift</h2>
+    <p class="sub">Variety is how evenly your time is spread over artists (high means many artists, low means a few on repeat). Taste shift is the share of your listening that moved to other genres since the previous month.</p>
+    <div class="chartbox"><canvas id="cTaste"></canvas></div>
+  </section>
+
+  <h2 class="sec">Mood journey</h2>
+  <p class="secp">Moods are estimated from artist tags, so treat them as a trend rather than a measurement. The page colors follow the dominant mood of the period you pick.</p>
+  <section class="grid g21">
+    <div class="card"><h2>Mood mix over time</h2><p class="sub">Share of your listening per mood, month by month.</p><div class="chartbox tall"><canvas id="cMood"></canvas></div></div>
+    <div class="card"><h2>Mood themes</h2><p class="sub" id="themeSub">Tap a theme to preview its colors.</p><div id="themes"></div></div>
+  </section>
+
+  <h2 class="sec">Habits</h2>
+  <section class="grid g12">
+    <div class="card"><h2>When you listen</h2><p class="sub">Weekday by hour of day.</p><div class="heat" id="heat"></div></div>
+    <div class="card"><h2 id="calTitle"></h2><p class="sub">Darker means more listening that day.</p><div class="calwrap"><div class="cal" id="cal"></div></div></div>
+  </section>
+
+  <h2 class="sec">Highlights</h2>
+  <section class="card"><ul class="hl-list" id="hl"></ul></section>
+
+  <footer id="foot"></footer>
+</div>
+<div class="wrap empty" id="empty" hidden>
+  <h1>No data yet</h1>
+  <p class="muted">Run the “Collect Spotify plays” workflow from the Actions tab in your repo, then reload this page.</p>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const fmtM = (ym) => { const [y, m] = ym.split('-'); return new Date(Date.UTC(+y, +m - 1, 15)).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }); };
+const short = (ym) => MON[+ym.slice(5) - 1] + ' ' + ym.slice(2, 4);
+const hrs = (m) => (m >= 90 ? (m / 60).toFixed(m >= 600 ? 0 : 1) + ' h' : Math.round(m) + ' min');
+const lum = (h) => { const n = parseInt(h.slice(1), 16); return (0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) / 255; };
+const ink = (a, b) => ((lum(a) + lum(b)) / 2 > 0.5 ? '#0d0b17' : '#ffffff');
+const ROOT = document.documentElement;
+const FALLBACK = { label: 'Mixed', color: '#2dd4bf', color2: '#38bdf8' };
+
+let D, M, Y, S;
+const mood = (k) => D.meta.moods[k] || FALLBACK;
+const keys = () => (S.mode === 'month' ? M : S.mode === 'year' ? Y : []);
+const cur = () => (S.mode === 'month' ? D.months[S.key] : S.mode === 'year' ? D.years[S.key] : D.all);
+function prev() { const k = keys(), i = k.indexOf(S.key); return i < 1 ? null : (S.mode === 'month' ? D.months : D.years)[k[i - 1]]; }
+const periodTitle = () => (S.mode === 'month' ? fmtM(S.key) : S.mode === 'year' ? S.key : 'All time');
+const activeMood = () => S.theme || cur().dom;
+function shares(c) {
+  const e = Object.entries(c.moods || {}); const t = e.reduce((a, x) => a + x[1], 0);
+  return t ? e.map(([k, v]) => [k, v / t]).sort((a, b) => b[1] - a[1]) : [];
+}
+const inSel = (k) => (S.mode === 'month' ? k === S.key : S.mode === 'year' ? k.startsWith(S.key) : true);
+
+// ---------- controls ----------
+function setMode(m) {
+  if (m === S.mode) return;
+  const yr = S.mode === 'month' ? S.key.slice(0, 4) : S.mode === 'year' ? S.key : null;
+  S.mode = m;
+  if (m === 'month') S.key = [...M].reverse().find((k) => yr && k.startsWith(yr)) || M[M.length - 1];
+  else if (m === 'year') S.key = Y.includes(yr) ? yr : Y[Y.length - 1];
+  else S.key = null;
+  render();
+}
+function step(dir) {
+  const k = keys(), i = k.indexOf(S.key), j = i + dir;
+  if (j >= 0 && j < k.length) { S.key = k[j]; render(); }
+}
+function buildControls() {
+  const seg = $('#seg'); seg.innerHTML = '';
+  for (const [m, l] of [['month', 'Month'], ['year', 'Year'], ['all', 'All time']]) {
+    const b = el('button', m === S.mode ? 'on' : '', l); b.onclick = () => setMode(m); seg.append(b);
+  }
+  const ks = [...keys()].reverse();
+  $('#sel').innerHTML = ks.map((k) => `<option value="${k}">${S.mode === 'month' ? fmtM(k) : k}</option>`).join('');
+  if (S.key) $('#sel').value = S.key;
+  $('#pick').hidden = S.mode === 'all';
+}
+
+// ---------- sections ----------
+function theme() {
+  const m = mood(activeMood());
+  ROOT.style.setProperty('--accent', m.color); ROOT.style.setProperty('--accent2', m.color2);
+}
+function renderHero() {
+  const c = cur(); const m = mood(activeMood());
+  $('#title').textContent = periodTitle();
+  const pill = $('#pill');
+  pill.style.background = `linear-gradient(90deg,${m.color},${m.color2})`; pill.style.color = ink(m.color, m.color2);
+  pill.textContent = S.theme ? `Previewing the ${mood(S.theme).label.toLowerCase()} theme` : c.dom ? `Mostly ${mood(c.dom).label.toLowerCase()}` : 'No mood data yet';
+  const sh = shares(c).slice(0, 3);
+  $('#mix').textContent = sh.length ? sh.map(([k, v]) => `${mood(k).label} ${Math.round(v * 100)}%`).join('  ·  ') : 'Mood tags are added after the first collector run.';
+  const now = new Date(), ym = now.toISOString().slice(0, 7);
+  const live = (S.mode === 'month' && S.key === ym) || (S.mode === 'year' && S.key === ym.slice(0, 4)) || (S.mode === 'all' && D.meta.lastYm === ym);
+  const p = $('#progress'); p.hidden = !live; p.textContent = 'This period is still in progress, so the numbers will keep growing.';
+}
+function renderRibbon() {
+  const box = $('#ribbon'); box.innerHTML = ''; box.className = 'ribbon' + (S.mode === 'all' ? ' allsel' : '');
+  const max = Math.max(...M.map((k) => D.months[k].hours), 1);
+  const lab = $('#ribbonLabels'); lab.innerHTML = '';
+  M.forEach((k) => {
+    const a = D.months[k], m = mood(a.dom);
+    const b = el('button', inSel(k) ? 'sel' : '');
+    b.style.height = Math.max(12, Math.round((a.hours / max) * 100)) + '%';
+    b.style.background = `linear-gradient(180deg,${m.color},${m.color2})`;
+    b.title = `${fmtM(k)}: ${a.hours} h, ${a.dom ? m.label.toLowerCase() : 'no mood data'}`;
+    b.setAttribute('aria-label', b.title);
+    b.onclick = () => { S.mode = 'month'; S.key = k; render(); };
+    box.append(b);
+    lab.append(el('span', '', k.endsWith('-01') || k === M[0] ? k.slice(0, 4) : ''));
+  });
+}
+function delta(a, b) { return b ? Math.round(((a - b) / b) * 100) : null; }
+function renderKpis() {
+  const c = cur(), p = prev();
+  const first = S.mode === 'month' ? S.key === D.meta.firstYm : S.mode === 'year' ? S.key === D.meta.firstYm.slice(0, 4) : false;
+  const vs = S.mode === 'month' ? 'vs previous month' : 'vs previous year';
+  const card = (l, v, d, note) => {
+    let dd = '';
+    if (d != null) dd = `<div class="d ${d > 0 ? 'up' : d < 0 ? 'dn' : 'flat'}">${d > 0 ? '▲' : d < 0 ? '▼' : '–'} ${Math.abs(d)}% ${vs}</div>`;
+    else if (note) dd = `<div class="d note">${note}</div>`;
+    return `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div>${dd}</div>`;
+  };
+  const n = (x) => x.toLocaleString('en-GB');
+  $('#kpis').innerHTML = [
+    card('Hours listened', n(c.hours), delta(c.hours, p?.hours)),
+    card('Tracks played', n(c.plays), delta(c.plays, p?.plays)),
+    card('Different artists', n(c.artists), delta(c.artists, p?.artists)),
+    card('New artists', n(c.newArtists), first ? null : delta(c.newArtists, p?.newArtists), first || S.mode === 'all' ? 'First time heard in this period' : ''),
+    card('Variety', `${c.eff} artists`, null, 'Like spreading your time evenly over this many'),
+    card('Top genre', esc(c.genres[0]?.[0] || '–'), null, c.genres[0] ? hrs(c.genres[0][1]) : ''),
+    card('Taste shift', c.tasteShift != null ? c.tasteShift + '%' : '–', null, c.tasteShift != null ? 'Of listening moved to other genres ' + vs : 'Needs a previous period'),
+    card('Skip rate', c.skipRate != null ? Math.round(c.skipRate * 100) + '%' : '–', null, c.skipRate != null ? 'Of tracks you skipped' : 'Comes with the history import'),
+  ].join('');
+}
+function renderStrip() {
+  const box = $('#strip'); box.innerHTML = '';
+  let items;
+  if (S.mode === 'all') { $('#stripTitle').textContent = 'Artist of the year'; items = Y.map((k) => ({ k, label: k, a: D.years[k], mode: 'year' })); }
+  else {
+    const yr = S.mode === 'month' ? S.key.slice(0, 4) : S.key;
+    $('#stripTitle').textContent = `Artist of the month, ${yr}`;
+    items = M.filter((k) => k.startsWith(yr)).map((k) => ({ k, label: MON[+k.slice(5) - 1], a: D.months[k], mode: 'month' }));
+  }
+  for (const it of items) {
+    const m = mood(it.a.dom), top = it.a.topArtists[0];
+    const b = el('button', 'tile' + (it.k === S.key ? ' sel' : ''), `<small>${it.label}</small><b>${esc(top ? top.n : '–')}</b><span>${top ? hrs(top.m) : ''}</span>`);
+    b.style.background = `linear-gradient(135deg,${m.color},${m.color2})`; b.style.color = ink(m.color, m.color2);
+    b.onclick = () => { S.mode = it.mode; S.key = it.k; render(); };
+    box.append(b);
+  }
+}
+function list(sel, items) {
+  const box = $(sel); const max = Math.max(...items.map((x) => x.v), 1);
+  box.innerHTML = items.length ? items.map((x, i) => `<div class="row"><span class="rk">${i + 1}</span><div class="nm"><b>${esc(x.n)}</b>${x.s ? `<small>${esc(x.s)}</small>` : ''}</div><span class="val">${x.t}</span><div class="bar"><i style="width:${Math.max(3, Math.round((x.v / max) * 100))}%"></i></div></div>`).join('') : '<p class="muted">Nothing here yet.</p>';
+}
+function renderLists() {
+  const c = cur();
+  list('#lArtists', c.topArtists.slice(0, 10).map((x) => ({ n: x.n, s: `${x.p} plays`, v: x.m, t: hrs(x.m) })));
+  list('#lTracks', c.topTracks.map((x) => ({ n: x.n, s: x.a, v: x.p, t: `${x.p}×` })));
+  list('#lAlbums', c.topAlbums.map((x) => ({ n: x.n, s: x.a, v: x.m, t: hrs(x.m) })));
+  list('#lGenres', c.genres.slice(0, 10).map(([g, m]) => ({ n: g, s: '', v: m, t: hrs(m) })));
+}
+function renderChurn() {
+  const c = cur(), box = $('#churn');
+  if (S.mode === 'all' || !c.churn) { box.innerHTML = '<p class="muted">Pick a month or year after the first one to see how your top 20 artists changed.</p>'; return; }
+  const ch = c.churn, ks = keys(), pk = ks[ks.indexOf(S.key) - 1];
+  const dots = Array.from({ length: ch.of }, (_, i) => `<i class="${i < ch.kept ? 'k' : ''}"></i>`).join('');
+  box.innerHTML = `<div class="big">${ch.kept}<span> of ${ch.of}</span></div>
+    <p class="muted">of your top artists were also in your top 20 in ${S.mode === 'month' ? fmtM(pk) : pk}.</p><div class="dots">${dots}</div>
+    ${ch.newIn.length ? `<h3>New in your top 20</h3><div class="chips">${ch.newIn.map((n) => `<span>${esc(n)}</span>`).join('')}</div>` : ''}
+    ${ch.out.length ? `<h3>Dropped out</h3><div class="chips out">${ch.out.map((n) => `<span>${esc(n)}</span>`).join('')}</div>` : ''}`;
+}
+function renderThemes() {
+  const c = cur(), box = $('#themes'); box.innerHTML = '';
+  const map = Object.fromEntries(shares(c));
+  Object.keys(D.meta.moods).sort((a, b) => (map[b] || 0) - (map[a] || 0)).forEach((k) => {
+    const m = mood(k), p = Math.round((map[k] || 0) * 100);
+    const b = el('button', 'theme' + (activeMood() === k ? ' on' : ''),
+      `<span class="sw" style="background:linear-gradient(135deg,${m.color},${m.color2})"></span><span class="tn">${m.label}</span><span class="tbar"><i style="width:${p}%;background:linear-gradient(90deg,${m.color},${m.color2})"></i></span><span class="tp">${p}%</span>`);
+    b.onclick = () => { S.theme = S.theme === k ? null : k; render(); };
+    box.append(b);
+  });
+  $('#themeSub').textContent = S.theme ? 'Previewing a theme. Tap it again to go back to the mood of this period.' : 'Tap a theme to preview its colors.';
+}
+function renderHeat() {
+  const hm = cur().hm, max = Math.max(...hm, 1);
+  const dn = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  let h = '<div></div>' + Array.from({ length: 24 }, (_, i) => `<div class="hl">${i % 6 === 0 ? i : ''}</div>`).join('');
+  for (let d = 0; d < 7; d++) {
+    h += `<div class="dl">${dn[d]}</div>`;
+    for (let x = 0; x < 24; x++) { const v = hm[d * 24 + x]; h += `<i style="--p:${v ? Math.round(12 + 88 * (v / max)) : 0}%" title="${dn[d]} ${x}:00, ${hrs(v)}"></i>`; }
+  }
+  $('#heat').innerHTML = h;
+}
+function renderCal() {
+  const box = $('#cal'); box.innerHTML = '';
+  const map = {}; let start, end;
+  const add = (ym) => { const a = D.months[ym]; if (!a || !a.days) return; for (const [d, v] of Object.entries(a.days)) map[`${ym}-${String(d).padStart(2, '0')}`] = v; };
+  if (S.mode === 'month') {
+    add(S.key); const [y, m] = S.key.split('-').map(Number);
+    start = Date.UTC(y, m - 1, 1); end = Date.UTC(y, m, 0); box.className = 'cal big'; $('#calTitle').textContent = 'Day by day';
+  } else if (S.mode === 'year') {
+    M.filter((k) => k.startsWith(S.key)).forEach(add); start = Date.UTC(+S.key, 0, 1); end = Date.UTC(+S.key, 11, 31); box.className = 'cal'; $('#calTitle').textContent = 'Year at a glance';
+  } else {
+    M.forEach(add); const [y, m] = D.meta.lastYm.split('-').map(Number); end = Date.UTC(y, m, 0); start = end - 364 * 864e5; box.className = 'cal'; $('#calTitle').textContent = 'Last 12 months';
+  }
+  const max = Math.max(...Object.values(map), 1);
+  const big = S.mode === 'month'; const mc = mood(activeMood());
+  const pad = (new Date(start).getUTCDay() + 6) % 7;
+  for (let i = 0; i < pad; i++) box.append(el('i', 'empty'));
+  const total = Math.round((end - start) / 864e5) + 1;
+  for (let i = 0; i < total; i++) {
+    const d = new Date(start + i * 864e5), k = d.toISOString().slice(0, 10), v = map[k] || 0;
+    const p = v ? Math.round(18 + 82 * (v / max)) : 0;
+    const c = el('i', '', big ? String(d.getUTCDate()) : '');
+    c.style.setProperty('--p', p + '%'); c.title = `${k}: ${hrs(v)}`;
+    if (big) c.style.color = p > 55 ? ink(mc.color, mc.color) : '#cfcbe6';
+    box.append(c);
+  }
+}
+function renderHighlights() {
+  let h = D.highlights || [];
+  h = S.mode === 'month' ? h.filter((x) => x.ym === S.key) : S.mode === 'year' ? h.filter((x) => x.ym.startsWith(S.key)) : h.slice(0, 10);
+  $('#hl').innerHTML = h.length ? h.map((x) => `<li>${esc(x.text)}${x.ym.length === 7 && S.mode !== 'month' ? `<small>${fmtM(x.ym)}</small>` : ''}</li>`).join('')
+    : '<li>No notable changes in this period yet. Highlights appear when something shifts between periods.</li>';
+}
+function render() {
+  buildControls(); theme(); renderHero(); renderRibbon(); renderKpis(); renderStrip(); renderLists();
+  renderChurn(); renderThemes(); renderHeat(); renderCal(); renderHighlights();
+}
+
+// ---------- timeline charts (built once) ----------
+function buildCharts() {
+  if (!window.Chart) return;
+  Chart.defaults.color = '#a9a3c4'; Chart.defaults.font.family = "'Instrument Sans',system-ui,sans-serif"; Chart.defaults.borderColor = '#2a2540';
+  const labels = M.map(short);
+  const base = {
+    responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, boxHeight: 12, usePointStyle: true } } },
+    scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 12, maxRotation: 0 } } },
+  };
+  const stacked = (id, sets) => new Chart($(id), {
+    type: 'line', data: { labels, datasets: sets },
+    options: {
+      ...base,
+      plugins: { ...base.plugins, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y.toFixed(0)}%` } } },
+      scales: { ...base.scales, y: { stacked: true, min: 0, max: 100, ticks: { callback: (v) => v + '%' } } },
+    },
+  });
+  const area = (label, data, color, i) => ({ label, data, backgroundColor: color + 'cc', borderColor: color, borderWidth: 1.5, fill: i === 0 ? 'origin' : '-1', pointRadius: 0, tension: 0.35 });
+
+  // genres
+  const peak = new Map();
+  M.forEach((k) => {
+    const gs = D.months[k].genres, s = gs.reduce((a, x) => a + x[1], 0);
+    gs.forEach(([g, v]) => peak.set(g, Math.max(peak.get(g) || 0, s ? v / s : 0)));
+  });
+  const topG = [...peak.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map((e) => e[0]);
+  const PAL = ['#38bdf8', '#f97316', '#facc15', '#a78bfa', '#fb7185', '#2dd4bf', '#a3e635', '#f0abfc', '#60a5fa', '#fdba74', '#64748b'];
+  const gsets = topG.map((g, i) => area(g, M.map((k) => {
+    const gs = D.months[k].genres, s = gs.reduce((a, x) => a + x[1], 0), f = gs.find((x) => x[0] === g);
+    return s ? (100 * (f ? f[1] : 0)) / s : 0;
+  }), PAL[i], i));
+  gsets.push(area('Other', M.map((k) => {
+    const gs = D.months[k].genres, s = gs.reduce((a, x) => a + x[1], 0);
+    const inTop = gs.filter((x) => topG.includes(x[0])).reduce((a, x) => a + x[1], 0);
+    return s ? (100 * (s - inTop)) / s : 0;
+  }), PAL[10], gsets.length));
+  stacked('#cGenre', gsets);
+
+  // moods
+  const msets = [];
+  Object.keys(D.meta.moods).forEach((k) => {
+    const data = M.map((ym) => { const mo = D.months[ym].moods, t = Object.values(mo).reduce((a, x) => a + x, 0); return t ? (100 * (mo[k] || 0)) / t : 0; });
+    if (data.some((x) => x > 0)) msets.push(area(mood(k).label, data, mood(k).color, msets.length));
+  });
+  stacked('#cMood', msets);
+
+  // variety + shift
+  new Chart($('#cTaste'), {
+    data: {
+      labels, datasets: [
+        { type: 'bar', label: 'Taste shift', data: M.map((k) => D.months[k].tasteShift), backgroundColor: '#f0abfc99', borderRadius: 5 },
+        { type: 'line', label: 'Variety', data: M.map((k) => Math.round(D.months[k].variety * 100)), borderColor: '#2dd4bf', backgroundColor: '#2dd4bf', tension: 0.35, pointRadius: 2 },
+      ],
+    },
+    options: { ...base, scales: { ...base.scales, y: { min: 0, max: 100, ticks: { callback: (v) => v + '%' } } } },
+  });
+}
+
+// ---------- start ----------
+(async function init() {
+  try {
+    const r = await fetch('data/summary.json?v=' + Date.now());
+    if (!r.ok) throw new Error(r.status);
+    D = await r.json();
+  } catch (e) { $('#empty').hidden = false; return; }
+  M = Object.keys(D.months).sort(); Y = Object.keys(D.years).sort();
+  if (!M.length) { $('#empty').hidden = false; return; }
+  S = { mode: 'month', key: M[M.length - 1], theme: null };
+  $('#app').hidden = false;
+  $('#demo').hidden = !D.meta.demo;
+  $('#sel').onchange = (e) => { S.key = e.target.value; render(); };
+  $('#older').onclick = () => step(-1); $('#newer').onclick = () => step(1);
+  $('#foot').textContent = 'Last updated ' + new Date(D.generated).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) + '. Times are in Stockholm time.';
+  render(); buildCharts();
+})();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
