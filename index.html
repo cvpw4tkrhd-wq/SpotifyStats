@@ -32,6 +32,7 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;
   background:
    radial-gradient(1100px 620px at 8% -8%,color-mix(in srgb,var(--accent) 30%,transparent),transparent 65%),
    radial-gradient(900px 560px at 105% 0%,color-mix(in srgb,var(--accent2) 26%,transparent),transparent 62%)}
+[hidden]{display:none!important}
 button,select{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -50,14 +51,24 @@ section{margin-top:14px}
 }
 
 /* top bar */
-.top{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.top{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.meta{display:flex;align-items:center;gap:8px}
+.ver{font:600 12px var(--body);color:var(--muted);padding:6px 11px;border:1px solid var(--line);border-radius:999px;background:var(--card);white-space:nowrap;cursor:pointer}
 .brand{font:800 20px var(--head);letter-spacing:-.01em}
-.ctrl{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.ctrl{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px}
 .seg{display:flex;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:3px}
 .seg button{border:0;background:none;padding:7px 16px;border-radius:999px;font-weight:600;color:var(--muted)}
 .seg button.on{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#0d0b17}
 .pick{display:flex;align-items:center;gap:6px}
-.pick button{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--card);font-size:20px;line-height:1}
+.pick button,.ibtn{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--card);font-size:20px;line-height:1;display:grid;place-items:center;padding:0}
+.ibtn svg{width:18px;height:18px}
+.ibtn.spin svg{animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.ibtn.spin svg{animation:none;opacity:.5}}
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);transform:translateX(-50%);z-index:60;max-width:calc(100% - 32px);
+  background:var(--card2);border:1px solid var(--accent);color:var(--text);padding:10px 18px;border-radius:18px;text-align:center;font-weight:600;font-size:14px;
+  opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.on{opacity:1}
 .pick select{height:36px;border-radius:999px;border:1px solid var(--line);background:var(--card);padding:0 14px;min-width:150px}
 .demo{margin-top:12px;border-radius:14px;padding:10px 14px;background:#3a2f12;border:1px solid #6b5a1e;color:#ffe08a;font-size:14px}
 
@@ -164,15 +175,21 @@ footer{margin-top:36px;color:var(--muted);font-size:13px}
 <div class="wrap" id="app" hidden>
   <header class="top">
     <div class="brand">SpotifyStats</div>
-    <div class="ctrl">
-      <div class="seg" id="seg" role="group" aria-label="Period type"></div>
-      <div class="pick" id="pick">
-        <button id="older" aria-label="Previous period">‹</button>
-        <select id="sel" aria-label="Choose period"></select>
-        <button id="newer" aria-label="Next period">›</button>
-      </div>
+    <div class="meta">
+      <button class="ver" id="ver" title="Tap for display info"></button>
+      <button class="ibtn" id="refresh" aria-label="Update app and data" title="Update app and data">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.9-3M4 5v4h4"/><path d="M4 13a8 8 0 0 0 14.9 3M20 19v-4h-4"/></svg>
+      </button>
     </div>
   </header>
+  <div class="ctrl">
+    <div class="seg" id="seg" role="group" aria-label="Period type"></div>
+    <div class="pick" id="pick">
+      <button id="older" aria-label="Previous period">‹</button>
+      <select id="sel" aria-label="Choose period"></select>
+      <button id="newer" aria-label="Next period">›</button>
+    </div>
+  </div>
   <div class="demo" id="demo" hidden>This is demo data. Your own listening replaces it after the first collector run.</div>
 
   <div class="hero">
@@ -232,12 +249,14 @@ footer{margin-top:36px;color:var(--muted);font-size:13px}
 
   <footer id="foot"></footer>
 </div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="wrap empty" id="empty" hidden>
   <h1>No data yet</h1>
   <p class="muted">Run the “Collect Spotify plays” workflow from the Actions tab in your repo, then reload this page.</p>
 </div>
 
 <script>
+const APP_VERSION = '1.2.1'; // bump this when index.html changes
 const $ = (s) => document.querySelector(s);
 const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -444,6 +463,7 @@ function render() {
 // ---------- timeline charts (built once) ----------
 function buildCharts() {
   if (!window.Chart) return;
+  ['#cGenre', '#cMood', '#cTaste'].forEach((id) => Chart.getChart($(id))?.destroy());
   Chart.defaults.color = '#a9a3c4'; Chart.defaults.font.family = "'Instrument Sans',system-ui,sans-serif"; Chart.defaults.borderColor = '#2a2540';
   const labels = M.map(short);
   const base = {
@@ -500,21 +520,70 @@ function buildCharts() {
   });
 }
 
+// ---------- data + update ----------
+function applyData(nd, keep) {
+  D = nd; M = Object.keys(D.months).sort(); Y = Object.keys(D.years).sort();
+  if (!keep) S = { mode: 'month', key: M[M.length - 1], theme: null };
+  else if (S.mode !== 'all' && !keys().includes(S.key)) S.key = keys()[keys().length - 1];
+  $('#demo').hidden = !D.meta.demo;
+  $('#foot').textContent = `SpotifyStats v${APP_VERSION}. Last updated ` + new Date(D.generated).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) + '. Times are in Stockholm time. Display: ' + diag().text + '.';
+}
+function diag() {
+  const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+  const p = document.createElement('div');
+  p.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top,0px);visibility:hidden';
+  document.body.append(p); const inset = p.offsetHeight; p.remove();
+  return { standalone, inset, text: `${standalone ? 'Home Screen app' : 'Browser'}, top inset ${inset} px` };
+}
+let toastTimer;
+function toast(msg, ms = 3000) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), ms);
+}
+async function refresh() {
+  const btn = $('#refresh'); if (btn.classList.contains('spin')) return;
+  btn.classList.add('spin');
+  try {
+    // 1) is there a newer version of the app itself?
+    const page = await fetch('index.html?nocache=' + Date.now(), { cache: 'no-store' });
+    const m = (await page.text()).match(/APP_VERSION\s*=\s*'([\d.]+)'/);
+    const latest = m ? m[1] : APP_VERSION;
+    if (latest !== APP_VERSION) {
+      toast(`New version v${latest} found. Reloading…`);
+      if ('caches' in window) for (const k of await caches.keys()) await caches.delete(k);
+      if (navigator.serviceWorker) for (const g of await navigator.serviceWorker.getRegistrations()) await g.unregister();
+      setTimeout(() => location.replace(location.pathname + '?v=' + latest + '&t=' + Date.now()), 800);
+      return;
+    }
+    // 2) fetch fresh data
+    const r = await fetch('data/summary.json?v=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+    const nd = await r.json();
+    if (!Object.keys(nd.months).length) throw new Error('empty');
+    const changed = nd.generated !== D.generated;
+    applyData(nd, true); render(); buildCharts();
+    toast(changed ? 'Data updated' : `Up to date (v${APP_VERSION})`);
+  } catch (e) {
+    toast('Could not update. Check your connection.');
+  } finally { btn.classList.remove('spin'); }
+}
+
 // ---------- start ----------
 (async function init() {
+  $('#ver').textContent = 'v' + APP_VERSION;
+  $('#refresh').onclick = refresh;
+  $('#ver').onclick = () => toast(`v${APP_VERSION} · ${diag().text}`, 8000);
+  let nd;
   try {
     const r = await fetch('data/summary.json?v=' + Date.now());
     if (!r.ok) throw new Error(r.status);
-    D = await r.json();
-  } catch (e) { $('#empty').hidden = false; return; }
-  M = Object.keys(D.months).sort(); Y = Object.keys(D.years).sort();
-  if (!M.length) { $('#empty').hidden = false; return; }
-  S = { mode: 'month', key: M[M.length - 1], theme: null };
+    nd = await r.json();
+  } catch (e) { $('#empty').hidden = false; $('#app').hidden = true; return; }
+  if (!Object.keys(nd.months).length) { $('#empty').hidden = false; return; }
+  applyData(nd, false);
   $('#app').hidden = false;
-  $('#demo').hidden = !D.meta.demo;
   $('#sel').onchange = (e) => { S.key = e.target.value; render(); };
   $('#older').onclick = () => step(-1); $('#newer').onclick = () => step(1);
-  $('#foot').textContent = 'Last updated ' + new Date(D.generated).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) + '. Times are in Stockholm time.';
   render(); buildCharts();
 })();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
