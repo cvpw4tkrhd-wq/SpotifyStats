@@ -22,6 +22,25 @@ if (!plays.length) {
 }
 const tags = readJson(path.join(DATA, 'artists.json'), {});
 
+// Rows from the history import carry e:1. Drop live-collector rows that duplicate one of them
+// (same track, within 5 seconds) so overlapping days are not counted twice.
+const importTimes = new Map();
+for (const p of plays) {
+  if (!p.e) continue;
+  let arr = importTimes.get(p.id);
+  if (!arr) { arr = []; importTimes.set(p.id, arr); }
+  arr.push(Date.parse(p.t));
+}
+if (importTimes.size) {
+  plays = plays.filter((p) => {
+    if (p.e) return true;
+    const arr = importTimes.get(p.id);
+    if (!arr) return true;
+    const t = Date.parse(p.t);
+    return !arr.some((x) => Math.abs(x - t) <= 5000);
+  });
+}
+
 // ---------- local time ----------
 const fmt = new Intl.DateTimeFormat('en-GB', {
   timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', weekday: 'short', hourCycle: 'h23',
@@ -40,7 +59,7 @@ const monthLabel = (ym) => {
 // ---------- rows ----------
 const gCache = new Map();
 const mCache = new Map();
-const rows = plays.map((p) => {
+const allRows = plays.map((p) => {
   const l = local(p.t);
   const a = p.a || 'Unknown';
   if (!gCache.has(a)) {
@@ -54,6 +73,20 @@ const rows = plays.map((p) => {
     g: gCache.get(a), mv: mCache.get(a), sk: p.sk,
   };
 });
+
+// A play counts after 30 seconds. Shorter rows are only used for the skip rate.
+const rows = allRows.filter((r) => r.min >= 0.5);
+
+const skT = new Map(); // period -> [rows, skipped]
+for (const r of allRows) {
+  if (r.sk === undefined) continue;
+  for (const k of [r.ym, r.y, 'all']) {
+    let e = skT.get(k);
+    if (!e) { e = [0, 0]; skT.set(k, e); }
+    e[0]++; if (r.sk) e[1]++;
+  }
+}
+const skipRateFor = (k) => { const e = skT.get(k || 'all'); return e && e[0] >= 20 ? +(e[1] / e[0]).toFixed(3) : null; };
 
 const firstSeen = new Map();
 for (const r of rows) {
@@ -69,7 +102,7 @@ function agg(rs, period, withDays) {
   const moods = {};
   const hm = new Array(168).fill(0);
   const days = {};
-  let min = 0, unc = 0, skN = 0, skY = 0;
+  let min = 0, unc = 0;
 
   for (const r of rs) {
     min += r.min;
@@ -89,7 +122,6 @@ function agg(rs, period, withDays) {
     if (r.mv) { for (const m in r.mv) moods[m] = (moods[m] || 0) + r.min * r.mv[m]; } else unc += r.min;
     hm[r.wd * 24 + r.h] += r.min;
     days[r.day] = (days[r.day] || 0) + r.min;
-    if (r.sk !== undefined) { skN++; if (r.sk) skY++; }
   }
 
   let H = 0;
@@ -115,7 +147,7 @@ function agg(rs, period, withDays) {
     newArtists: newA,
     variety: +variety.toFixed(3),
     eff: Math.round(Math.exp(H)),
-    skipRate: skN ? +(skY / skN).toFixed(3) : null,
+    skipRate: skipRateFor(period),
     dom,
     moods: moodsR,
     unclassified: Math.round(unc),
@@ -229,5 +261,12 @@ const summary = {
   highlights: H.slice(0, 80),
 };
 fs.mkdirSync(path.dirname(OUT), { recursive: true });
+if (fs.existsSync(OUT)) {
+  const old = readJson(OUT, null);
+  if (old && JSON.stringify({ ...old, generated: 0 }) === JSON.stringify({ ...summary, generated: 0 })) {
+    console.log('No changes - summary.json left as it was.');
+    process.exit(0);
+  }
+}
 fs.writeFileSync(OUT, JSON.stringify(summary));
 console.log(`Summary written: ${rows.length} plays, ${monthKeys.length} months -> ${OUT}`);

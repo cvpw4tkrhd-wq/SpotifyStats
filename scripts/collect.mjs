@@ -10,7 +10,7 @@ const DATA = 'data';
 const PLAYS = path.join(DATA, 'plays');
 const STATE = path.join(DATA, 'state.json');
 const ARTISTS = path.join(DATA, 'artists.json');
-const MAX_LOOKUPS = 400; // Last.fm lookups per run (the rest are done on later runs)
+const MAX_LOOKUPS = 1200; // Last.fm lookups per run (the rest are done on later runs)
 fs.mkdirSync(PLAYS, { recursive: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -96,7 +96,7 @@ if (!LK) {
       if (!r.ok) { await sleep(1000); continue; }
       const j = await r.json();
       if (j.error === 29) { console.log('Last.fm rate limit reached - continuing next run.'); break; }
-      artists[name] = (j.toptags?.tag || []).slice(0, 15).map((t) => [t.name, t.count]);
+      artists[name] = (j.toptags?.tag || []).slice(0, 10).map((t) => [t.name, t.count]);
       done++;
     } catch (e) {
       console.log('Last.fm lookup failed for', name, e.message);
