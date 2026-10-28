@@ -10,8 +10,8 @@ const DATA = 'data';
 const PLAYS = path.join(DATA, 'plays');
 const STATE = path.join(DATA, 'state.json');
 const ARTISTS = path.join(DATA, 'artists.json');
-const MAX_LOOKUPS = +(process.env.MAX_LOOKUPS || 1200); // Last.fm lookups per run (the rest are done on later runs)
-const MAX_IMG = +(process.env.MAX_IMG || 600); // artist/album image lookups per run
+const MAX_LOOKUPS = +(process.env.MAX_LOOKUPS ?? 1200); // Last.fm lookups per run (the rest are done on later runs)
+const MAX_IMG = +(process.env.MAX_IMG ?? 600); // artist/album image lookups per run
 const IMAGES = path.join(DATA, 'images.json');
 const SEP = '\u2016';
 fs.mkdirSync(PLAYS, { recursive: true });
@@ -217,3 +217,81 @@ try {
 }
 writeJson(IMAGES, im);
 console.log(`Images: ${imgDone} looked up (${imgFound} found), ${Math.max(0, queue.length - imgDone)} still waiting.`);
+
+// ---------- Release years (Deezer) and artist origin country (MusicBrainz) ----------
+// meta.json: { ar: { artist: "SE" | 0 }, yr: { "artist\u2016album": 1998 | 0 } }  (0 = looked up, nothing found)
+const META = process.env.META_FILE || path.join(DATA, 'meta.json');
+const MAX_MB = +(process.env.MAX_MB ?? 300); // MusicBrainz: about one request per second, and it often sheds load
+const MAX_YR = +(process.env.MAX_YR ?? 600); // Deezer album lookups for the original release year
+const MB_UA = 'SpotifyStats/3.0 (+https://github.com/cvpw4tkrhd-wq/SpotifyStats)';
+const meta = readJson(META, { ar: {}, yr: {} });
+const mbEsc = (x) => String(x).replace(/(["\\])/g, '\\$1');
+let mbLast = 0;
+async function mb(url) {
+  for (let i = 0; i < 5; i++) {
+    const wait = 1100 - (Date.now() - mbLast);
+    if (wait > 0) await sleep(wait);
+    mbLast = Date.now();
+    try {
+      const r = await fetch(url, { headers: { 'User-Agent': MB_UA, Accept: 'application/json' } });
+      if (r.status === 503 || r.status === 429) { await sleep(4000 * (i + 1)); continue; } // MusicBrainz sheds load when busy
+      if (!r.ok) return undefined;
+      return await r.json();
+    } catch (e) { await sleep(2000); }
+  }
+  return undefined;
+}
+async function mbArtist(name) {
+  const j = await mb('https://musicbrainz.org/ws/2/artist?fmt=json&limit=5&query=' + encodeURIComponent(`artist:"${mbEsc(name)}"`));
+  if (!j) return undefined;
+  const t = norm(name);
+  const c = (j.artists || []).filter((a) => norm(a.name) === t || norm(a['sort-name']) === t).sort((a, b) => (b.score || 0) - (a.score || 0))[0];
+  if (!c) return 0;
+  return c.country || c.area?.['iso-3166-1-codes']?.[0] || 0;
+}
+// Original release year: the earliest date among Deezer editions with the same title (so remasters do not move an album to a later decade)
+async function deezerYear(artist, album) {
+  const j = await getJson('https://api.deezer.com/search/album?limit=10&q=' + encodeURIComponent(artist + ' ' + album));
+  if (!j) return undefined;
+  const ta = norm(artist), tl = norm(album);
+  const cands = (j.data || []).filter((x) => norm(x.artist?.name) === ta && norm(x.title) === tl).slice(0, 4);
+  if (!cands.length) return 0;
+  let best = 0;
+  for (const c of cands) {
+    await sleep(180);
+    const d = await getJson('https://api.deezer.com/album/' + c.id);
+    const y = +String(d?.release_date || '').slice(0, 4);
+    if (y >= 1900 && y <= 2100 && (!best || y < best)) best = y;
+  }
+  return best;
+}
+// ---- release years (Deezer) ----
+const yrQueue = [...albumMin.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8000).map((e) => e[0]).filter((k) => !Object.hasOwn(meta.yr, k));
+let yrDone = 0;
+try {
+  for (const k of yrQueue.slice(0, MAX_YR)) {
+    const [artist, album] = k.split(SEP);
+    const v = await deezerYear(artist, album);
+    await sleep(180);
+    if (v === undefined) continue;
+    meta.yr[k] = v; yrDone++;
+    if (yrDone % 50 === 0) writeJson(META, meta);
+  }
+} catch (e) { console.log('Release-year lookups stopped early:', e.message); }
+writeJson(META, meta);
+console.log(`Release years: ${yrDone} looked up, ${Math.max(0, yrQueue.length - yrDone)} still waiting (${Object.keys(meta.yr).length} albums known).`);
+
+// ---- artist origin country (MusicBrainz) ----
+const mbQueue = rankedArtists.slice(0, 5000).filter((k) => !Object.hasOwn(meta.ar, k));
+let mbDone = 0, mbFail = 0;
+try {
+  for (const k of mbQueue.slice(0, MAX_MB)) {
+    const v = await mbArtist(k);
+    if (v === undefined) { if (++mbFail >= 8) { console.log('MusicBrainz is busy - stopping for this run.'); break; } continue; }
+    mbFail = 0;
+    meta.ar[k] = v; mbDone++;
+    if (mbDone % 20 === 0) writeJson(META, meta);
+  }
+} catch (e) { console.log('MusicBrainz lookups stopped early:', e.message); }
+writeJson(META, meta);
+console.log(`MusicBrainz: ${mbDone} artists looked up, ${Math.max(0, mbQueue.length - mbDone)} still waiting (${Object.keys(meta.ar).length} artists known).`);

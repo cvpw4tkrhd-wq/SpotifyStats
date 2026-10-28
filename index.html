@@ -283,6 +283,21 @@ a.mrow:hover{background:var(--card2)}
   .tabs a{font-size:10.5px}
 }
 @media (max-width:560px){.cmpcols{grid-template-columns:1fr}.quilt{grid-template-columns:30px repeat(12,minmax(0,1fr))}}
+
+/* ===== Phase 3: decades, world map, habits ===== */
+.map{width:100%;height:auto;display:block;margin-top:6px}
+.map path{fill:color-mix(in srgb,var(--accent) var(--p,0%),#ffffff14);stroke:#0d0b17;stroke-width:.35;cursor:pointer;transition:fill .15s}
+.map path.sel{stroke:#fff;stroke-width:1.1}
+.geoinfo{margin-top:10px;padding:12px 14px;border-radius:16px;background:var(--card2)}
+.geoinfo h3{margin:0 0 4px;font:700 18px var(--head);color:var(--text)}
+.geoinfo p{margin:0 0 6px;color:var(--muted)}
+.jump{display:flex;gap:6px;overflow-x:auto;padding:4px 0 8px;margin:10px -16px 0;padding-left:16px;padding-right:16px;scrollbar-width:none}
+.jump::-webkit-scrollbar{display:none}
+.jump button{flex:none;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 14px;color:var(--muted);font-weight:600}
+.jump button:hover{color:var(--text);border-color:var(--accent)}
+.pad{scroll-margin-top:14px}
+.statrow{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 12px}
+.statrow span{padding:6px 12px;border-radius:999px;background:color-mix(in srgb,var(--accent) 16%,transparent);font-weight:600;font-size:13px}
 </style>
 </head>
 <body>
@@ -390,7 +405,7 @@ a.mrow:hover{background:var(--card2)}
 </div>
 
 <script>
-const APP_VERSION = '3.0.0'; // bump this when index.html changes
+const APP_VERSION = '4.0.0'; // bump this when index.html changes
 const $ = (s) => document.querySelector(s);
 const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -1153,8 +1168,9 @@ function renderCompare() {
 }
 async function viewStats() {
   const box = $('#v-stats');
-  ['season', 'moodhour', 'skiphour'].forEach(killChart);
+  ['season', 'moodhour', 'skiphour', 'dec', 'avg', 'start', 'shuffle', 'devices'].forEach(killChart);
   box.innerHTML = `<h2 class="sec first">Stats</h2><p class="secp">Records, rhythms and habits across your whole history.</p>
+    <div class="jump" id="sjump"></div>
     <section class="grid g4" id="srec"></section>
     <section class="card pad"><h2>How your day changed</h2><p class="sub">When you listened, year by year. Brighter means more of that year's listening.</p><div id="sclock"></div></section>
     <section class="grid g12 pad">
@@ -1171,6 +1187,9 @@ async function viewStats() {
       <div class="card"><h2>Comebacks</h2><p class="sub">Artists you left for three years or more and then returned to.</p><div id="scome"><p class="note">Loading…</p></div></div>
     </section>
     <section class="card pad"><h2>Binge listens</h2><p class="sub">Artists where most of your listening happened in a single month.</p><div id="swonder"><p class="note">Loading…</p></div></section>
+    <section class="card pad" id="sec-decades"><h2>Music by decade</h2><p class="sub" id="sdecSub">When the music you play was originally released.</p><div id="sdec"><p class="note">Loading…</p></div></section>
+    <section class="card pad" id="sec-world"><div class="cardhead"><h2>Where your music comes from</h2><div id="geoYearBox"></div></div><p class="sub" id="sgeoSub">The home country of the artists you listen to.</p><div id="sworld"><p class="note">Loading…</p></div></section>
+    <section class="card pad" id="sec-habits"><h2>How you choose your music</h2><p class="sub" id="shabSub">How tracks start, whether shuffle is on, and where you listen.</p><div id="shabits"><p class="note">Loading…</p></div></section>
     <section class="card pad"><div class="cardhead"><h2>On this day</h2><div class="toolbar" style="margin:0"><input type="date" id="sotdDate" aria-label="Date"></div></div><div id="sotd"><p class="note">Loading…</p></div></section>
     <section class="card pad"><h2>Compare two periods</h2><div id="scmp"></div></section>`;
   renderRecords(); renderClock(); renderSeasons(); renderMoodHour(); renderQuilt(); renderSkipHour(); renderCompare();
@@ -1179,6 +1198,121 @@ async function viewStats() {
   $('#sotdDate').onchange = (e) => { if (e.target.value) renderOnThisDay(e.target.value.slice(5)); };
   renderOnThisDay(d0.slice(5));
   renderSkips(); renderLongTerm(); renderWonders();
+  renderJump(); renderDecades(); renderWorld(); renderHabits();
+}
+
+// ================= Phase 3 =================
+function renderJump() {
+  const items = [['#srec', 'Records'], ['#sclock', 'Rhythm'], ['#sskips', 'Skips'], ['#slong', 'Favourites'], ['#sec-decades', 'Decades'], ['#sec-world', 'World'], ['#sec-habits', 'Habits'], ['#sotd', 'On this day'], ['#scmp', 'Compare']];
+  const box = $('#sjump'); box.innerHTML = '';
+  for (const [sel, label] of items) {
+    const b = el('button', '', label);
+    b.onclick = () => { const t = $(sel); const sec = t.closest('section') || t; sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    box.append(b);
+  }
+}
+const decColor = (d) => `hsl(${Math.round(((d - 1920) / 110) * 300)} 70% 58%)`;
+const pending = (what, p) => `<p class="note">${what} are still being collected in the background${p != null ? ` (${Math.round(p * 100)}% so far)` : ''}. Check back in a day or two.</p>`;
+
+function renderDecades() {
+  const box = $('#sdec'), dd = D.decades;
+  killChart('dec'); killChart('avg');
+  if (!dd || dd.coverage < 0.05) { box.innerHTML = pending('Release years', dd && dd.coverage); return; }
+  $('#sdecSub').textContent = `When the music you play was originally released. Based on the ${Math.round(dd.coverage * 100)}% of your listening where the release year is known.`;
+  const years = Object.keys(dd.byYear).filter((y) => (dd.coverageByYear[y] || 0) >= 0.15);
+  const decs = [...new Set(years.flatMap((y) => Object.keys(dd.byYear[y]).map(Number)))].sort((a, b) => a - b);
+  box.innerHTML = `<div class="chartbox" style="height:300px"><canvas id="cDec"></canvas></div>
+    <div class="mh">How old is the music you play?</div><div class="chartbox" style="height:210px"><canvas id="cAvg"></canvas></div><p class="note" id="sdecNote"></p>
+    <div class="mh">Most played albums by decade</div><div id="sdecChips"></div><div id="sdecTop"></div>`;
+  if (window.Chart) {
+    CH.dec = new Chart($('#cDec'), { type: 'bar', data: { labels: years, datasets: decs.map((d) => ({ label: d + 's', backgroundColor: decColor(d), borderWidth: 0,
+      data: years.map((y) => { const o = dd.byYear[y], t = Object.values(o).reduce((a, v) => a + v, 0) || 1; return +(((o[d] || 0) * 100) / t).toFixed(1); }) })) },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y}%` } } },
+        scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, max: 100, ticks: { callback: (v) => v + '%' } } } } });
+    const ay = Object.keys(dd.avgYear);
+    CH.avg = new Chart($('#cAvg'), { type: 'line', data: { labels: ay, datasets: [
+      { label: 'Average release year', data: ay.map((y) => dd.avgYear[y]), borderColor: acc(), backgroundColor: acc(), tension: 0.3, pointRadius: 3, borderWidth: 2.5 },
+      { label: 'Calendar year', data: ay.map((y) => +y), borderColor: '#ffffff55', borderDash: [5, 5], pointRadius: 0, borderWidth: 1.5 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${Math.round(c.parsed.y)}` } } }, scales: { x: { grid: { display: false } }, y: { ticks: { callback: (v) => String(v) } } } } });
+    const last = ay[ay.length - 1];
+    $('#sdecNote').textContent = `In ${last} the music you played was on average ${Math.round(+last - dd.avgYear[last])} years old.`;
+  }
+  const tops = Object.keys(dd.top).map(Number).sort((a, b) => a - b);
+  const def = tops.reduce((b, d) => ((dd.all[d] || 0) > (dd.all[b] || 0) ? d : b), tops[0]);
+  const drawTop = (d) => {
+    $('#sdecTop').innerHTML = miniRows((dd.top[d] || []).map((o) => ({ n: o.n, s: `${o.a} · ${o.y}`, v: hrs(o.m), pic: cover(o.n, o.a, 40), href: artistLink(o.a) })));
+  };
+  $('#sdecChips').innerHTML = chipBar('sdecbar', tops.map((d) => [String(d), d + 's']), String(def));
+  wireChips('sdecbar', (k) => drawTop(+k));
+  drawTop(def);
+}
+
+// ---------- world map ----------
+let WORLD = null;
+const flag = (c) => c.replace(/./g, (ch) => String.fromCodePoint(127397 + ch.charCodeAt(0)));
+let REGIONS = null;
+const cname = (c) => { try { REGIONS = REGIONS || new Intl.DisplayNames(['en'], { type: 'region' }); return REGIONS.of(c) || c; } catch (e) { return c; } };
+async function renderWorld() {
+  const box = $('#sworld'), g = D.geo;
+  if (!g || g.coverage < 0.05) { box.innerHTML = pending('Artist origins', g && g.coverage); return; }
+  try { if (!WORLD) { const r = await fetch('assets/world.json'); if (!r.ok) throw new Error(r.status); WORLD = await r.json(); } }
+  catch (e) { box.innerHTML = '<p class="note">Could not load the map.</p>'; return; }
+  const years = Object.keys(g.byYear).sort();
+  $('#sgeoSub').textContent = `The home country of the artists you listen to. Based on the ${Math.round(g.coverage * 100)}% of your listening where the country is known.`;
+  $('#geoYearBox').innerHTML = `<select id="geoYear" aria-label="Year"><option value="">All time</option>${[...years].reverse().map((y) => `<option>${y}</option>`).join('')}</select>`;
+  box.innerHTML = '<div class="statrow" id="geoStats"></div><div id="geoSvg"></div><div class="geoinfo" id="geoInfo"></div><div class="mh">Top countries</div><div id="geoList"></div>';
+  let selC = null;
+  const draw = () => {
+    const yr = $('#geoYear').value, data = yr ? g.byYear[yr] || {} : g.all;
+    const tot = Object.values(data).reduce((a, v) => a + v, 0) || 1, mx = Math.max(...Object.values(data), 1);
+    const sorted = Object.entries(data).sort((a, b) => b[1] - a[1]);
+    const se = data.SE || 0;
+    $('#geoStats').innerHTML = `<span>${Math.round((se / tot) * 100)}% Swedish artists</span><span>${Math.round(100 - (se / tot) * 100)}% from abroad</span><span>${sorted.length} countries</span>`;
+    $('#geoSvg').innerHTML = `<svg class="map" viewBox="0 0 ${WORLD.w} ${WORLD.h}" role="img" aria-label="World map of where your artists come from">${Object.entries(WORLD.c).map(([c, d]) => {
+      const v = data[c] || 0; const p = v ? Math.round(18 + 82 * Math.sqrt(v / mx)) : 0;
+      return `<path d="${d}" data-c="${c}" style="--p:${p}%"><title>${cname(c)}${v ? ': ' + hrs(v) : ''}</title></path>`; }).join('')}</svg>`;
+    const info = (c) => {
+      selC = c; $$('#geoSvg path').forEach((x) => x.classList.toggle('sel', x.dataset.c === c));
+      const v = data[c] || 0, tops = (g.top[c] || []);
+      $('#geoInfo').innerHTML = v ? `<h3>${flag(c)} ${cname(c)}</h3><p>${hrs(v)} · ${Math.round((v / tot) * 100)}% of your listening${yr ? ' in ' + yr : ''}</p>${yr ? '' : miniRows(tops.map((t) => ({ n: t.n, v: hrs(t.m), pic: avatar(t.n, 36), href: artistLink(t.n) })))}`
+        : `<h3>${flag(c)} ${cname(c)}</h3><p>No listening from here${yr ? ' in ' + yr : ''}.</p>`;
+    };
+    $$('#geoSvg path').forEach((x) => (x.onclick = () => info(x.dataset.c)));
+    info(selC && (data[selC] || WORLD.c[selC]) ? selC : sorted[0] ? sorted[0][0] : 'SE');
+    const lm = Math.max(...sorted.slice(0, 10).map((e) => e[1]), 1);
+    $('#geoList').innerHTML = sorted.slice(0, 10).map(([c, v], i) => `<div class="row" style="cursor:pointer" data-c="${c}"><span class="rk">${i + 1}</span><div class="nm"><b>${flag(c)} ${cname(c)}</b></div><span class="val">${hrs(v)} · ${Math.round((v / tot) * 100)}%</span><div class="bar"><i style="width:${Math.max(3, Math.round((v / lm) * 100))}%"></i></div></div>`).join('');
+    $$('#geoList .row').forEach((x) => (x.onclick = () => info(x.dataset.c)));
+  };
+  $('#geoYear').onchange = draw;
+  draw();
+}
+
+// ---------- how you choose your music ----------
+const START_GROUPS = [['You picked it', 'cp', '#38bdf8'], ['Played next', 't', '#a78bfa'], ['Skipped into it', 'fb', '#fb7185'], ['Other', 'areo', '#64748b']];
+const DEVICES = [['i', 'iPhone / iPad', '#38bdf8'], ['a', 'Android', '#a3e635'], ['w', 'Windows', '#facc15'], ['m', 'Mac', '#f0abfc'], ['b', 'Web player', '#2dd4bf'], ['t', 'TV and speakers', '#fb923c'], ['l', 'Linux', '#94a3b8'], ['o', 'Other', '#64748b']];
+function renderHabits() {
+  const box = $('#shabits'), hw = D.how;
+  killChart('start'); killChart('shuffle'); killChart('devices');
+  if (!hw) { box.innerHTML = pending('Listening habits'); return; }
+  const ys = Object.keys(hw.years).filter((y) => hw.years[y].sh[1] >= 300);
+  const all = hw.all, sTot = Object.values(all.s).reduce((a, v) => a + v, 0) || 1;
+  const grp = (s, keys) => [...keys].reduce((a, k) => a + (s[k] || 0), 0);
+  const devTot = Object.values(all.dev).reduce((a, v) => a + v, 0) || 1;
+  const topDev = DEVICES.map(([k, l]) => [l, all.dev[k] || 0]).sort((a, b) => b[1] - a[1])[0];
+  box.innerHTML = `<div class="statrow"><span>${Math.round((grp(all.s, 'cp') / sTot) * 100)}% of tracks picked by you</span><span>${Math.round((grp(all.s, 't') / sTot) * 100)}% played next</span><span>${Math.round((all.sh[0] / all.sh[1]) * 100)}% on shuffle</span><span>Most time on ${topDev[0]} (${Math.round((topDev[1] / devTot) * 100)}%)</span></div>
+    <div class="grid g12"><div><div class="mh">How tracks start</div><div class="chartbox" style="height:260px"><canvas id="cStart"></canvas></div></div>
+    <div><div class="mh">Shuffle</div><div class="chartbox" style="height:260px"><canvas id="cShuffle"></canvas></div></div></div>
+    <div class="mh">Where you listen</div><div class="chartbox" style="height:280px"><canvas id="cDevices"></canvas></div>
+    <p class="note">Devices are grouped by type. Tracks that started automatically after the previous one count as "played next".</p>`;
+  if (!window.Chart) return;
+  const stackOpts = (fmt) => ({ responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y}%` } } },
+    scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, max: 100, ticks: { callback: (v) => v + '%' } } } });
+  CH.start = new Chart($('#cStart'), { type: 'bar', data: { labels: ys, datasets: START_GROUPS.map(([l, keys, c]) => ({ label: l, backgroundColor: c, borderWidth: 0,
+    data: ys.map((y) => { const s = hw.years[y].s, t = Object.values(s).reduce((a, v) => a + v, 0) || 1; return +((grp(s, keys) * 100) / t).toFixed(1); }) })) }, options: stackOpts() });
+  CH.shuffle = new Chart($('#cShuffle'), { type: 'line', data: { labels: ys, datasets: [{ label: 'Shuffle on', data: ys.map((y) => Math.round((hw.years[y].sh[0] * 100) / hw.years[y].sh[1])), borderColor: acc(), backgroundColor: acc(), tension: 0.3, pointRadius: 3, borderWidth: 2.5 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${c.parsed.y}% of tracks` } } }, scales: { x: { grid: { display: false } }, y: { min: 0, max: 100, ticks: { callback: (v) => v + '%' } } } } });
+  CH.devices = new Chart($('#cDevices'), { type: 'bar', data: { labels: ys, datasets: DEVICES.filter(([k]) => ys.some((y) => (hw.years[y].dev[k] || 0) > 0)).map(([k, l, c]) => ({ label: l, backgroundColor: c, borderWidth: 0,
+    data: ys.map((y) => { const d = hw.years[y].dev, t = Object.values(d).reduce((a, v) => a + v, 0) || 1; return +(((d[k] || 0) * 100) / t).toFixed(1); }) })) }, options: stackOpts() });
 }
 
 // ---------- routing ----------

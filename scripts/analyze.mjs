@@ -21,6 +21,7 @@ if (!plays.length) {
   process.exit(0);
 }
 const tags = readJson(path.join(DATA, 'artists.json'), {});
+const meta = readJson(path.join(DATA, 'meta.json'), { ar: {}, yr: {} });
 
 // Rows from the history import carry e:1. Drop live-collector rows that duplicate one of them
 // (same track, within 5 seconds) so overlapping days are not counted twice.
@@ -70,7 +71,7 @@ const allRows = plays.map((p) => {
   return {
     ym: `${l.y}-${l.m}`, y: l.y, date: `${l.y}-${l.m}-${l.d}`, day: +l.d, h: l.h, wd: l.wd,
     min: (p.ms || 180000) / 60000, a, n: p.n || 'Unknown', al: p.al || '',
-    g: gCache.get(a), mv: mCache.get(a), sk: p.sk, t: p.t,
+    g: gCache.get(a), mv: mCache.get(a), sk: p.sk, t: p.t, x: p.x,
   };
 });
 
@@ -420,6 +421,78 @@ for (const r of allRows) {
 
 const trackIndex = allTracks.filter((t) => keepT.has(t)).map((t) => { const e = skTrk.get(t.n + '\u0001' + t.a); return [t.n, t.a, t.al || '', t.p, r1(t.m), t.f, t.l, yrStr(t.y), e && e[0] >= 8 ? +(e[1] / e[0]).toFixed(2) : null]; });
 
+
+// ---------- Phase 3: release decades, origin countries, how you choose music ----------
+const SEPc = '\u2016';
+const nowYear = new Date().getFullYear();
+let decades = null, geo = null, how = null;
+
+if (Object.keys(meta.yr).length) {
+  const all = {}, byYear = {}, covY = {}, avgAcc = {}, topAlb = new Map();
+  let known = 0, total = 0;
+  for (const r of rows) {
+    total += r.min;
+    const cv = (covY[r.y] ||= [0, 0]); cv[1] += r.min;
+    if (!r.al) continue;
+    const yr = meta.yr[r.a + SEPc + r.al];
+    if (!yr || yr < 1900 || yr > nowYear + 1) continue;
+    const d = Math.floor(yr / 10) * 10;
+    known += r.min; cv[0] += r.min;
+    all[d] = (all[d] || 0) + r.min;
+    const by = (byYear[r.y] ||= {}); by[d] = (by[d] || 0) + r.min;
+    const av = (avgAcc[r.y] ||= [0, 0]); av[0] += yr * r.min; av[1] += r.min;
+    let tm = topAlb.get(d); if (!tm) { tm = new Map(); topAlb.set(d, tm); }
+    const k = r.a + SEPc + r.al; let o = tm.get(k); if (!o) { o = { n: r.al, a: r.a, m: 0, y: yr }; tm.set(k, o); }
+    o.m += r.min;
+  }
+  decades = {
+    coverage: total ? +(known / total).toFixed(3) : 0,
+    all: Object.fromEntries(Object.entries(all).map(([d, m]) => [d, r1(m)])),
+    byYear: Object.fromEntries(Object.entries(byYear).sort().map(([y, o]) => [y, Object.fromEntries(Object.entries(o).map(([d, m]) => [d, r1(m)]))])),
+    avgYear: Object.fromEntries(Object.entries(avgAcc).sort().filter(([, v]) => v[1] >= 600).map(([y, v]) => [y, +(v[0] / v[1]).toFixed(1)])),
+    coverageByYear: Object.fromEntries(Object.entries(covY).sort().map(([y, v]) => [y, v[1] ? +(v[0] / v[1]).toFixed(2) : 0])),
+    top: Object.fromEntries([...topAlb.entries()].sort((a, b) => a[0] - b[0]).map(([d, tm]) => [d, [...tm.values()].sort((a, b) => b.m - a.m).slice(0, 8).map((o) => ({ n: o.n, a: o.a, m: r1(o.m), y: o.y }))])),
+  };
+}
+
+if (Object.keys(meta.ar).length) {
+  const NOGEO = new Set(['XW', 'XE', 'XU', 'XG']);
+  const all = {}, byYear = {}, arts = new Map();
+  let known = 0, total = 0;
+  for (const r of rows) {
+    total += r.min;
+    const c = meta.ar[r.a];
+    if (!c || NOGEO.has(c)) continue;
+    known += r.min;
+    all[c] = (all[c] || 0) + r.min;
+    const by = (byYear[r.y] ||= {}); by[c] = (by[c] || 0) + r.min;
+    let am = arts.get(c); if (!am) { am = new Map(); arts.set(c, am); }
+    am.set(r.a, (am.get(r.a) || 0) + r.min);
+  }
+  geo = {
+    coverage: total ? +(known / total).toFixed(3) : 0,
+    all: Object.fromEntries(Object.entries(all).sort((a, b) => b[1] - a[1]).map(([c, m]) => [c, r1(m)])),
+    byYear: Object.fromEntries(Object.entries(byYear).sort().map(([y, o]) => [y, Object.fromEntries(Object.entries(o).map(([c, m]) => [c, r1(m)]))])),
+    top: Object.fromEntries([...arts.entries()].map(([c, am]) => [c, [...am.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n, m]) => ({ n, m: r1(m) }))])),
+  };
+}
+
+if (allRows.some((r) => r.x)) {
+  const mk = () => ({ s: {}, sh: [0, 0], dev: {} });
+  const years = {}, allH = mk();
+  for (const r of allRows) {
+    if (!r.x) continue;
+    const h = (years[r.y] ||= mk());
+    for (const t of [h, allH]) {
+      t.s[r.x[0]] = (t.s[r.x[0]] || 0) + 1;
+      t.sh[1]++; if (r.x[2] === '1') t.sh[0]++;
+      if (r.min >= 0.5) t.dev[r.x[1]] = (t.dev[r.x[1]] || 0) + r.min;
+    }
+  }
+  const fin = (t) => ({ s: t.s, sh: t.sh, dev: Object.fromEntries(Object.entries(t.dev).map(([k, v]) => [k, r1(v)])) });
+  how = { years: Object.fromEntries(Object.entries(years).sort().map(([y, t]) => [y, fin(t)])), all: fin(allH) };
+}
+
 // ---------- write ----------
 const moodMeta = {};
 for (const [k, m] of Object.entries(MOODS)) moodMeta[k] = { label: m.label, color: m.color, color2: m.color2 };
@@ -427,7 +500,7 @@ for (const [k, m] of Object.entries(MOODS)) moodMeta[k] = { label: m.label, colo
 const summary = {
   generated: new Date().toISOString(),
   meta: { firstYm: monthKeys[0], lastYm: monthKeys[monthKeys.length - 1], totalPlays: rows.length, tz: TZ, demo: DEMO, moods: moodMeta },
-  months, years, all, extra, records,
+  months, years, all, extra, records, decades, geo, how,
   highlights: H.slice(0, 80),
 };
 
