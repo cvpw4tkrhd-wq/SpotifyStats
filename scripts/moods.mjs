@@ -103,3 +103,16 @@ export function primaryGenre(tags) {
   }
   return null;
 }
+
+// Up to n distinct genre-like tags, title-cased (used for the chips on artist pages)
+export function topGenres(tags, n = 4) {
+  const out = [];
+  for (const [name] of tags) {
+    let g = String(name).toLowerCase().trim();
+    if (BLOCK.has(g) || /^\d{2,4}s?$/.test(g)) continue;
+    g = title(ALIAS[g] || g);
+    if (!out.includes(g)) out.push(g);
+    if (out.length >= n) break;
+  }
+  return out;
+}

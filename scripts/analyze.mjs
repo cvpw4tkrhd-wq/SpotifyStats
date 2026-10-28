@@ -2,7 +2,7 @@
 // Run: node scripts/analyze.mjs
 import fs from 'node:fs';
 import path from 'node:path';
-import { MOODS, moodVector, primaryGenre } from './moods.mjs';
+import { MOODS, moodVector, primaryGenre, topGenres } from './moods.mjs';
 
 const DATA = process.env.DATA_DIR || 'data';
 const OUT = process.env.OUT_FILE || path.join(DATA, 'summary.json');
@@ -250,6 +250,76 @@ yearKeys.forEach((y, i) => {
 });
 H.sort((a, b) => (a.ym < b.ym ? 1 : -1));
 
+// ---------- deep-dive data: artists and tracks ----------
+const r1 = (x) => Math.round(x);
+const yrStr = (o) => Object.entries(o).sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([k, v]) => `${k}:${r1(v)}`).join(',');
+
+const AR = new Map();
+for (const r of rows) {
+  let x = AR.get(r.a);
+  if (!x) { x = { n: r.a, min: 0, p: 0, f: r.date, l: r.date, yrs: {}, mo: {}, tr: new Map(), al: new Map() }; AR.set(r.a, x); }
+  x.min += r.min; x.p++;
+  if (r.date < x.f) x.f = r.date;
+  if (r.date > x.l) x.l = r.date;
+  x.yrs[r.y] = (x.yrs[r.y] || 0) + r.min;
+  x.mo[r.ym] = (x.mo[r.ym] || 0) + r.min;
+  let t = x.tr.get(r.n);
+  if (!t) { t = { n: r.n, a: r.a, al: r.al, p: 0, m: 0, y: {}, f: r.date, l: r.date }; x.tr.set(r.n, t); }
+  t.p++; t.m += r.min; t.y[r.y] = (t.y[r.y] || 0) + 1;
+  if (r.date < t.f) t.f = r.date;
+  if (r.date > t.l) t.l = r.date;
+  if (!t.al && r.al) t.al = r.al;
+  if (r.al) {
+    let b = x.al.get(r.al);
+    if (!b) { b = { n: r.al, p: 0, m: 0 }; x.al.set(r.al, b); }
+    b.p++; b.m += r.min;
+  }
+}
+const skA = new Map();
+for (const r of allRows) {
+  if (r.sk === undefined) continue;
+  let e = skA.get(r.a);
+  if (!e) { e = [0, 0]; skA.set(r.a, e); }
+  e[0]++; if (r.sk) e[1]++;
+}
+
+// Light index of every artist (for search and ranking): [name, minutes, plays, first, last, "year:minutes,..."]
+const ranked = [...AR.values()].sort((a, b) => b.min - a.min);
+const artistIndex = ranked.map((x) => [x.n, r1(x.min), x.p, x.f, x.l, yrStr(x.yrs)]);
+
+// Full detail for the top artists
+const DETAIL_N = +(process.env.DETAIL_N || 1000);
+const details = {};
+for (const x of ranked.slice(0, DETAIL_N)) {
+  const sk = skA.get(x.n);
+  const mv = mCache.get(x.n);
+  let md = null, best = 0;
+  if (mv) for (const [k, v] of Object.entries(mv)) if (v > best) { best = v; md = k; }
+  details[x.n] = {
+    m: r1(x.min), p: x.p, f: x.f, l: x.l,
+    mo: Object.fromEntries(Object.entries(x.mo).sort().map(([k, v]) => [k, r1(v)])),
+    t: [...x.tr.values()].sort((a, b) => b.p - a.p || b.m - a.m).slice(0, 25).map((t) => [t.n, t.p, r1(t.m), yrStr(t.y), t.al]),
+    al: [...x.al.values()].sort((a, b) => b.m - a.m).slice(0, 8).map((b) => [b.n, b.p, r1(b.m)]),
+    sk: sk && sk[0] >= 10 ? +(sk[1] / sk[0]).toFixed(3) : null,
+    tg: topGenres(tags[x.n] || [], 4),
+    md,
+  };
+}
+
+// Track index: top 1500 overall plus the top 100 of every year
+const allTracks = [];
+for (const x of AR.values()) for (const t of x.tr.values()) allTracks.push(t);
+allTracks.sort((a, b) => b.p - a.p || b.m - a.m);
+const keepT = new Set(allTracks.slice(0, 1500));
+const perYear = new Map();
+for (const t of allTracks) for (const [y, c] of Object.entries(t.y)) {
+  let arr = perYear.get(y);
+  if (!arr) { arr = []; perYear.set(y, arr); }
+  arr.push([c, t]);
+}
+for (const arr of perYear.values()) { arr.sort((a, b) => b[0] - a[0]); arr.slice(0, 100).forEach(([, t]) => keepT.add(t)); }
+const trackIndex = allTracks.filter((t) => keepT.has(t)).map((t) => [t.n, t.a, t.al || '', t.p, r1(t.m), t.f, t.l, yrStr(t.y)]);
+
 // ---------- write ----------
 const moodMeta = {};
 for (const [k, m] of Object.entries(MOODS)) moodMeta[k] = { label: m.label, color: m.color, color2: m.color2 };
@@ -260,13 +330,23 @@ const summary = {
   months, years, all,
   highlights: H.slice(0, 80),
 };
-fs.mkdirSync(path.dirname(OUT), { recursive: true });
-if (fs.existsSync(OUT)) {
-  const old = readJson(OUT, null);
-  if (old && JSON.stringify({ ...old, generated: 0 }) === JSON.stringify({ ...summary, generated: 0 })) {
-    console.log('No changes - summary.json left as it was.');
-    process.exit(0);
-  }
+
+function writeIfChanged(file, text) {
+  if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === text) return false;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, text);
+  return true;
 }
-fs.writeFileSync(OUT, JSON.stringify(summary));
-console.log(`Summary written: ${rows.length} plays, ${monthKeys.length} months -> ${OUT}`);
+
+let changed = false;
+const prevSummary = readJson(OUT, null);
+if (!(prevSummary && JSON.stringify({ ...prevSummary, generated: 0 }) === JSON.stringify({ ...summary, generated: 0 }))) {
+  fs.mkdirSync(path.dirname(OUT), { recursive: true });
+  fs.writeFileSync(OUT, JSON.stringify(summary));
+  changed = true;
+}
+const outDir = path.dirname(OUT);
+for (const [name, obj] of [['artist-index.json', artistIndex], ['artist-details.json', details], ['track-index.json', trackIndex]]) {
+  if (writeIfChanged(path.join(outDir, name), JSON.stringify(obj))) changed = true;
+}
+console.log(changed ? `Data files updated: ${rows.length} plays, ${monthKeys.length} months, ${artistIndex.length} artists, ${trackIndex.length} tracks indexed.` : 'No changes.');
