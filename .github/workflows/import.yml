@@ -1,0 +1,54 @@
+name: Import history
+
+# Runs when SpotifyImport.zip is uploaded to the repo root (or manually from the Actions tab).
+on:
+  push:
+    paths:
+      - 'SpotifyImport.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Unpack the import
+        run: |
+          test -f SpotifyImport.zip || { echo "SpotifyImport.zip not found in the repo root"; exit 1; }
+          unzip -q -o SpotifyImport.zip -d /tmp/imp
+          mkdir -p data/plays scripts
+          cp /tmp/imp/data/plays/*.json data/plays/
+          cp /tmp/imp/scripts/*.mjs scripts/
+          cp /tmp/imp/index.html index.html
+          cat > /tmp/merge.mjs <<'JS'
+          import fs from 'node:fs';
+          const fresh = JSON.parse(fs.readFileSync('/tmp/imp/data/artists.json', 'utf8'));
+          let current = {};
+          try { current = JSON.parse(fs.readFileSync('data/artists.json', 'utf8')); } catch {}
+          fs.writeFileSync('data/artists.json', JSON.stringify({ ...fresh, ...current }));
+          console.log('artist tags merged:', Object.keys({ ...fresh, ...current }).length);
+          JS
+          node /tmp/merge.mjs
+          rm SpotifyImport.zip
+
+      - name: Build summary
+        run: node scripts/analyze.mjs
+
+      - name: Save to the repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --staged --quiet || (git commit -m "Import Spotify history" && git push)
