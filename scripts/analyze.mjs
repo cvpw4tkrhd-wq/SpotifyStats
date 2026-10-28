@@ -70,7 +70,7 @@ const allRows = plays.map((p) => {
   return {
     ym: `${l.y}-${l.m}`, y: l.y, date: `${l.y}-${l.m}-${l.d}`, day: +l.d, h: l.h, wd: l.wd,
     min: (p.ms || 180000) / 60000, a, n: p.n || 'Unknown', al: p.al || '',
-    g: gCache.get(a), mv: mCache.get(a), sk: p.sk,
+    g: gCache.get(a), mv: mCache.get(a), sk: p.sk, t: p.t,
   };
 });
 
@@ -102,10 +102,11 @@ function agg(rs, period, withDays) {
   const moods = {};
   const hm = new Array(168).fill(0);
   const days = {};
-  let min = 0, unc = 0;
+  let min = 0, unc = 0, newMin = 0;
 
   for (const r of rs) {
     min += r.min;
+    if (period && firstSeen.get(r.a).startsWith(period)) newMin += r.min;
     am.set(r.a, (am.get(r.a) || 0) + r.min);
     ap.set(r.a, (ap.get(r.a) || 0) + 1);
     const tk = r.n + '\u0001' + r.a;
@@ -145,6 +146,10 @@ function agg(rs, period, withDays) {
     plays: rs.length,
     artists: am.size,
     newArtists: newA,
+    newShare: period && min ? +(newMin / min).toFixed(3) : null,
+    discover: period && period.length === 4
+      ? [...am.entries()].filter(([a]) => firstSeen.get(a).startsWith(period)).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n, m]) => ({ n, m: Math.round(m) }))
+      : undefined,
     variety: +variety.toFixed(3),
     eff: Math.round(Math.exp(H)),
     skipRate: skipRateFor(period),
@@ -318,7 +323,102 @@ for (const t of allTracks) for (const [y, c] of Object.entries(t.y)) {
   arr.push([c, t]);
 }
 for (const arr of perYear.values()) { arr.sort((a, b) => b[0] - a[0]); arr.slice(0, 100).forEach(([, t]) => keepT.add(t)); }
-const trackIndex = allTracks.filter((t) => keepT.has(t)).map((t) => [t.n, t.a, t.al || '', t.p, r1(t.m), t.f, t.l, yrStr(t.y)]);
+
+// ---------- Phase 2: records, rhythm, sessions, on-this-day ----------
+const MOOD_KEYS = Object.keys(MOODS);
+const moodHour = {}, moodWd = {};
+for (const m of MOOD_KEYS) { moodHour[m] = new Array(24).fill(0); moodWd[m] = new Array(7).fill(0); }
+for (const r of rows) if (r.mv) for (const m in r.mv) { moodHour[m][r.h] += r.min * r.mv[m]; moodWd[m][r.wd] += r.min * r.mv[m]; }
+const skH = Array.from({ length: 24 }, () => [0, 0]);
+for (const r of allRows) if (r.sk !== undefined) { skH[r.h][0]++; if (r.sk) skH[r.h][1]++; }
+const extra = {
+  moodHour: Object.fromEntries(Object.entries(moodHour).map(([k, v]) => [k, v.map(Math.round)])),
+  moodWd: Object.fromEntries(Object.entries(moodWd).map(([k, v]) => [k, v.map(Math.round)])),
+  skipHour: skH.map(([n, y]) => (n >= 200 ? +(y / n).toFixed(3) : null)),
+};
+
+// records
+const dayMin = new Map();
+let firstRow = null;
+for (const r of rows) {
+  dayMin.set(r.date, (dayMin.get(r.date) || 0) + r.min);
+  if (!firstRow || r.t < firstRow.t) firstRow = r;
+}
+const dnum = (d) => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / 864e5;
+const dayList = [...dayMin.keys()].sort();
+let streak = { len: 0, from: null, to: null }, runFrom = dayList[0], prevN = null;
+for (let i = 0; i < dayList.length; i++) {
+  const n = dnum(dayList[i]);
+  if (prevN !== null && n !== prevN + 1) runFrom = dayList[i];
+  const len = n - dnum(runFrom) + 1;
+  if (len > streak.len) streak = { len, from: runFrom, to: dayList[i] };
+  prevN = n;
+}
+const topDayE = [...dayMin.entries()].sort((a, b) => b[1] - a[1])[0];
+
+// listening sessions: tracks less than 20 minutes apart belong together
+const ev = plays.map((p) => { const end = Date.parse(p.t), ms = p.ms || 180000; return [end - ms, end, ms]; }).sort((a, b) => a[0] - b[0]);
+let sCount = 0, sMs = 0, sLongest = null, cur = null;
+const sYear = {};
+const finishS = (c) => {
+  sCount++; sMs += c.ms;
+  const y = String(new Date(c.start).getUTCFullYear());
+  (sYear[y] ||= [0, 0]); sYear[y][0]++; sYear[y][1] += c.ms;
+  if (!sLongest || c.ms > sLongest.ms) sLongest = c;
+};
+for (const [st, en, ms] of ev) {
+  if (cur && st - cur.end <= 20 * 60e3) { cur.end = Math.max(cur.end, en); cur.ms += ms; cur.n++; }
+  else { if (cur) finishS(cur); cur = { start: st, end: en, ms, n: 1 }; }
+}
+if (cur) finishS(cur);
+const ls = sLongest ? local(sLongest.start) : null;
+const records = {
+  firstPlay: firstRow ? { n: firstRow.n, a: firstRow.a, date: firstRow.date } : null,
+  streak,
+  topDay: topDayE ? { date: topDayE[0], min: r1(topDayE[1]) } : null,
+  activeDays: dayList.length,
+  daysSinceFirst: firstRow ? Math.round(dnum(dayList[dayList.length - 1]) - dnum(firstRow.date)) + 1 : 0,
+  sessions: {
+    count: sCount,
+    avgMin: sCount ? r1(sMs / 60000 / sCount) : 0,
+    longest: sLongest ? { min: r1(sLongest.ms / 60000), n: sLongest.n, date: `${ls.y}-${ls.m}-${ls.d}` } : null,
+    byYear: Object.fromEntries(Object.entries(sYear).sort().map(([y, [n, ms]]) => [y, r1(ms / 60000 / n)])),
+  },
+};
+
+// "on this day": the top artist and track of every calendar day, per year
+const otd = new Map();
+for (const r of rows) {
+  const k = r.date.slice(5) + '|' + r.y;
+  let x = otd.get(k);
+  if (!x) { x = { min: 0, a: new Map(), t: new Map() }; otd.set(k, x); }
+  x.min += r.min;
+  x.a.set(r.a, (x.a.get(r.a) || 0) + r.min);
+  const tk = r.n + '\u0001' + r.a;
+  x.t.set(tk, (x.t.get(tk) || 0) + 1);
+}
+const onThisDay = {};
+for (const [k, x] of [...otd.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+  if (x.min < 20) continue;
+  const [md, y] = k.split('|');
+  const ta = [...x.a.entries()].sort((a, b) => b[1] - a[1])[0];
+  const tt = [...x.t.entries()].sort((a, b) => b[1] - a[1])[0];
+  const [tn, tart] = tt[0].split('\u0001');
+  (onThisDay[md] ||= []).push([+y, ta[0], tn, tart, r1(x.min)]);
+}
+for (const md of Object.keys(onThisDay)) onThisDay[md].sort((a, b) => b[0] - a[0]);
+
+// per-track skip rate for the track index
+const skTrk = new Map();
+for (const r of allRows) {
+  if (r.sk === undefined) continue;
+  const k = r.n + '\u0001' + r.a;
+  let e = skTrk.get(k);
+  if (!e) { e = [0, 0]; skTrk.set(k, e); }
+  e[0]++; if (r.sk) e[1]++;
+}
+
+const trackIndex = allTracks.filter((t) => keepT.has(t)).map((t) => { const e = skTrk.get(t.n + '\u0001' + t.a); return [t.n, t.a, t.al || '', t.p, r1(t.m), t.f, t.l, yrStr(t.y), e && e[0] >= 8 ? +(e[1] / e[0]).toFixed(2) : null]; });
 
 // ---------- write ----------
 const moodMeta = {};
@@ -327,7 +427,7 @@ for (const [k, m] of Object.entries(MOODS)) moodMeta[k] = { label: m.label, colo
 const summary = {
   generated: new Date().toISOString(),
   meta: { firstYm: monthKeys[0], lastYm: monthKeys[monthKeys.length - 1], totalPlays: rows.length, tz: TZ, demo: DEMO, moods: moodMeta },
-  months, years, all,
+  months, years, all, extra, records,
   highlights: H.slice(0, 80),
 };
 
@@ -346,7 +446,7 @@ if (!(prevSummary && JSON.stringify({ ...prevSummary, generated: 0 }) === JSON.s
   changed = true;
 }
 const outDir = path.dirname(OUT);
-for (const [name, obj] of [['artist-index.json', artistIndex], ['artist-details.json', details], ['track-index.json', trackIndex]]) {
+for (const [name, obj] of [['artist-index.json', artistIndex], ['artist-details.json', details], ['track-index.json', trackIndex], ['on-this-day.json', onThisDay]]) {
   if (writeIfChanged(path.join(outDir, name), JSON.stringify(obj))) changed = true;
 }
 console.log(changed ? `Data files updated: ${rows.length} plays, ${monthKeys.length} months, ${artistIndex.length} artists, ${trackIndex.length} tracks indexed.` : 'No changes.');
