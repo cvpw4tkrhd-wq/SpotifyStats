@@ -1,0 +1,1632 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d0b17">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Atlas">
+<meta name="description" content="Drop in your streaming-history export and explore your listening. Everything runs in your browser.">
+<title>Listening Atlas</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#0d0b17;--card:#161325;--card2:#1d1a30;--line:#2a2540;--text:#eef0f7;--muted:#a9a3c4;
+  --accent:#2dd4bf;--accent2:#38bdf8;--up:#4ade80;--down:#fb7185;
+  --head:'Bricolage Grotesque',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --body:'Instrument Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;color:var(--text);font:15px/1.5 var(--body);min-height:100vh;
+  padding:0 env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+body::before{content:"";position:fixed;inset:0;z-index:-1;
+  background:
+   linear-gradient(to bottom,#0d0b17 0,rgba(13,11,23,.85) 40px,rgba(13,11,23,0) 190px),
+   radial-gradient(1100px 620px at 8% -8%,color-mix(in srgb,var(--accent) 30%,transparent),transparent 65%),
+   radial-gradient(900px 560px at 105% 0%,color-mix(in srgb,var(--accent2) 26%,transparent),transparent 62%)}
+[hidden]{display:none!important}
+button,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1320px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 16px 56px}
+.muted{color:var(--muted)}
+section{margin-top:14px}
+
+/* fade under the status bar / Dynamic Island (touch devices only) */
+.scrim{display:none}
+@media (hover:none) and (pointer:coarse){
+  .scrim{display:block;position:fixed;top:0;left:0;right:0;z-index:50;pointer-events:none;
+    height:calc(env(safe-area-inset-top,0px) + 22px);
+    background:linear-gradient(to bottom,rgba(13,11,23,.62) 0%,rgba(13,11,23,.38) 55%,rgba(13,11,23,0) 100%);
+    -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+    -webkit-mask-image:linear-gradient(to bottom,#000 55%,transparent 100%);mask-image:linear-gradient(to bottom,#000 55%,transparent 100%)}
+}
+
+/* top bar */
+.top{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.meta{display:flex;align-items:center;gap:8px}
+.ver{font:600 12px var(--body);color:var(--muted);padding:6px 11px;border:1px solid var(--line);border-radius:999px;background:var(--card);white-space:nowrap;cursor:pointer}
+.brand{font:800 20px var(--head);letter-spacing:-.01em}
+.ctrl{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px}
+.seg{display:flex;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:3px}
+.seg button{border:0;background:none;padding:7px 16px;border-radius:999px;font-weight:600;color:var(--muted)}
+.seg button.on{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#0d0b17}
+.pick{display:flex;align-items:center;gap:6px}
+.pick button,.ibtn{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--card);font-size:20px;line-height:1;display:grid;place-items:center;padding:0}
+.ibtn svg{width:18px;height:18px}
+.ibtn.spin svg{animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.ibtn.spin svg{animation:none;opacity:.5}}
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);transform:translateX(-50%);z-index:60;max-width:calc(100% - 32px);
+  background:var(--card2);border:1px solid var(--accent);color:var(--text);padding:10px 18px;border-radius:18px;text-align:center;font-weight:600;font-size:14px;
+  opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.on{opacity:1}
+.pick select{height:36px;border-radius:999px;border:1px solid var(--line);background:var(--card);padding:0 14px;min-width:150px}
+.demo{margin-top:12px;border-radius:14px;padding:10px 14px;background:#3a2f12;border:1px solid #6b5a1e;color:#ffe08a;font-size:14px}
+
+/* hero */
+.hero{margin-top:26px}
+.hero h1{font:800 clamp(44px,9vw,104px)/.92 var(--head);letter-spacing:-.035em;margin:0}
+.moodrow{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;margin-top:16px}
+.pill{display:inline-block;padding:7px 16px;border-radius:999px;font:700 15px var(--head)}
+.ribbonbox{margin-top:22px}
+.ribscroll{overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;padding-bottom:6px}
+.ribinner{width:max(100%,calc(var(--n,1) * 9px))}
+@media (min-width:900px){.ribinner{width:max(100%,calc(var(--n,1) * 5px))}}
+.ribbon{display:flex;align-items:flex-end;gap:2px;height:110px}
+.ribbon button{flex:1 1 0;min-width:0;border:0;border-radius:5px 5px 2px 2px;padding:0;opacity:.45}
+.ribbon button.sel,.ribbon.allsel button{opacity:1}
+.ribbon button:hover{opacity:.85}
+.ribbon-labels{display:flex;gap:2px;margin-top:6px;font-size:11px;color:var(--muted)}
+.ribbon-labels span{flex:1 1 0;white-space:nowrap;min-width:0;overflow:visible}
+.ribbon-note{font-size:13px;color:var(--muted);margin-top:4px}
+
+/* cards */
+.card{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:20px}
+.card h2{font:700 18px/1.2 var(--head);margin:0 0 4px}
+.card .sub{color:var(--muted);font-size:13px;margin:0 0 14px}
+.sec{font:800 clamp(24px,3.4vw,34px)/1.1 var(--head);letter-spacing:-.02em;margin:40px 0 2px}
+.secp{color:var(--muted);margin:0 0 4px;max-width:62ch}
+.grid{display:grid;gap:14px}
+.grid>*{min-width:0}
+.g4{grid-template-columns:repeat(4,1fr)}
+.g21{grid-template-columns:2fr 1fr}
+.g12{grid-template-columns:1fr 1fr}
+
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:16px 18px}
+.kpi .l{color:var(--muted);font-size:13px}
+.kpi .v{font:800 clamp(24px,3vw,34px)/1.1 var(--head);margin-top:4px;overflow-wrap:anywhere}
+.kpi .d{font-size:13px;font-weight:600;margin-top:4px}
+.kpi .d.up{color:var(--up)}.kpi .d.dn{color:var(--down)}.kpi .d.flat,.kpi .d.note{color:var(--muted);font-weight:400}
+
+/* artist of the month */
+.strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(138px,1fr));gap:10px}
+.tile{border:0;border-radius:18px;padding:12px 14px;text-align:left;display:flex;flex-direction:column;gap:2px;min-height:96px;position:relative}
+.tile small{font-weight:600;opacity:.8}
+.tile b{font:700 16px/1.15 var(--head);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tile span{font-size:12px;opacity:.8;margin-top:auto}
+.tile.sel{outline:3px solid #fff;outline-offset:2px}
+
+/* ranked lists */
+.row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;column-gap:10px;align-items:center;padding:7px 0}
+.rk{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font:700 13px var(--head);background:color-mix(in srgb,var(--accent) 22%,transparent)}
+.row:first-child .rk{background:var(--accent);color:#0d0b17}
+.nm b,.nm small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nm b{font-weight:600}.nm small{color:var(--muted);font-size:12px}
+.val{font-weight:600;font-size:13px;color:var(--muted)}
+.bar{grid-column:2/4;height:6px;border-radius:99px;background:#ffffff12;margin-top:6px}
+.bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+
+/* charts */
+.chartbox{position:relative;height:290px;min-width:0}
+.chartbox.tall{height:380px}
+.card{min-width:0}
+
+/* churn */
+.big{font:800 54px/1 var(--head)}
+.big span{font-size:20px;color:var(--muted);font-weight:600}
+.dots{display:flex;flex-wrap:wrap;gap:5px;margin:14px 0}
+.dots i{width:14px;height:14px;border-radius:50%;background:#ffffff1a}
+.dots i.k{background:linear-gradient(135deg,var(--accent),var(--accent2))}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 14px}
+.chips span{padding:4px 11px;border-radius:999px;font-size:13px;background:color-mix(in srgb,var(--accent) 18%,transparent)}
+.chips.out span{background:#ffffff12;color:var(--muted)}
+.card h3{font:600 13px var(--body);color:var(--muted);margin:14px 0 2px}
+
+/* mood themes */
+.theme{display:grid;grid-template-columns:34px 92px 1fr 40px;gap:10px;align-items:center;width:100%;text-align:left;padding:7px 8px;border-radius:14px;border:1px solid transparent;background:none}
+.theme.on{border-color:var(--accent);background:var(--card2)}
+.theme .sw{width:34px;height:34px;border-radius:12px}
+.theme .tn{font-weight:600}
+.tbar{height:8px;border-radius:99px;background:#ffffff12;overflow:hidden}
+.tbar i{display:block;height:100%;border-radius:99px}
+.tp{font-size:13px;color:var(--muted);text-align:right}
+
+/* habits */
+.heat{display:grid;grid-template-columns:34px repeat(24,minmax(0,1fr));gap:3px}
+.heat i{aspect-ratio:1;border-radius:4px;background:color-mix(in srgb,var(--accent) var(--p,6%),#ffffff10)}
+.heat .hl,.heat .dl{font-size:11px;color:var(--muted);display:flex;align-items:center}
+.heat .hl{justify-content:flex-start;white-space:nowrap;overflow:visible}
+.calwrap{overflow-x:auto;padding-bottom:6px}
+.cal{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,var(--cs,13px));grid-auto-columns:var(--cs,13px);gap:3px;width:max-content}
+.cal.big{--cs:34px}
+.cal i{border-radius:5px;background:color-mix(in srgb,var(--accent) var(--p,0%),#ffffff10);font-style:normal;font-size:11px;display:grid;place-items:center}
+.cal i.empty{background:none}
+
+/* highlights */
+.hl-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.hl-list li{padding:12px 16px;border-radius:16px;background:var(--card2);border-left:4px solid var(--accent)}
+.hl-list small{display:block;color:var(--muted)}
+
+footer{margin-top:36px;color:var(--muted);font-size:13px}
+.empty{padding:40px 20px;text-align:center}
+
+@media (max-width:1000px){.g4{grid-template-columns:repeat(2,1fr)}.g21,.g12{grid-template-columns:1fr}}
+@media (max-width:560px){.g4.lists{grid-template-columns:1fr}.theme{grid-template-columns:30px 80px 1fr 38px}.chartbox{height:260px}.pick select{min-width:120px}}
+
+/* ===== navigation ===== */
+.tabs{display:flex;gap:6px;margin-top:12px}
+.tabs a{display:flex;align-items:center;gap:8px;padding:8px 18px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--muted);text-decoration:none;font-weight:600}
+.tabs a.on{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#0d0b17;border-color:transparent}
+.tabs svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ===== avatars and covers ===== */
+.av,.cv{position:relative;display:inline-grid;place-items:center;width:var(--s,44px);height:var(--s,44px);flex:none;overflow:hidden;color:#fff;
+  background:linear-gradient(135deg,hsl(var(--h) 55% 40%),hsl(calc(var(--h) + 40) 55% 26%));font:700 calc(var(--s,44px) * .34) var(--head)}
+.av{border-radius:50%}.cv{border-radius:10px}
+.av b,.cv b{font-weight:700}
+.av img,.cv img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+a.row,a.arow,a.trow{color:inherit;text-decoration:none}
+.row.has-av{grid-template-columns:28px 40px minmax(0,1fr) auto}
+.row.has-av .bar{grid-column:3/5}
+.row.has-av .av,.row.has-av .cv{--s:40px}
+a.row:hover .nm b{text-decoration:underline}
+
+/* ===== lists ===== */
+.sec.first{margin-top:22px}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0 10px}
+.toolbar input{flex:1 1 220px;min-width:0;height:44px;border-radius:999px;border:1px solid var(--line);background:var(--card);padding:0 18px;color:var(--text);font-size:16px}
+.toolbar select{height:44px;border-radius:999px;border:1px solid var(--line);background:var(--card);padding:0 16px;font-size:16px}
+.chipbar{display:flex;gap:6px;flex-wrap:wrap}
+.chipbar button{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 14px;color:var(--muted);font-weight:600}
+.chipbar button.on{background:color-mix(in srgb,var(--accent) 24%,transparent);color:var(--text);border-color:var(--accent)}
+.listcard{margin-top:12px;padding:8px 12px}
+.arow,.trow{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 6px;border-radius:14px}
+.arow:hover,.trow:hover{background:var(--card2)}
+.arow .sp{width:76px;height:26px;color:var(--accent)}
+.trow .val{text-align:right}
+.more{display:block;margin:10px auto 6px;padding:10px 22px;border-radius:999px;border:1px solid var(--line);background:var(--card2);font-weight:600}
+
+/* ===== artist / track pages ===== */
+.back{display:inline-flex;gap:6px;align-items:center;margin-top:18px;color:var(--muted);text-decoration:none;font-weight:600}
+.back:hover{color:var(--text)}
+.ahero{display:flex;gap:22px;align-items:center;margin:16px 0 18px}
+.ahero .av,.ahero .cv{--s:128px}
+.ahero .cv{border-radius:16px}
+.ahero h1{font:800 clamp(32px,6.5vw,68px)/.98 var(--head);letter-spacing:-.03em;margin:0;overflow-wrap:anywhere}
+.ahero p{margin:6px 0 0;color:var(--muted)}
+.ahero p a{color:var(--text)}
+.tagrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.tag{padding:4px 12px;border-radius:999px;background:color-mix(in srgb,var(--accent) 18%,transparent);font-size:13px;font-weight:600}
+.cardhead{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:10px}
+.cardhead h2{margin:0}
+.chips a{padding:4px 11px;border-radius:999px;font-size:13px;background:color-mix(in srgb,var(--accent) 18%,transparent);color:inherit;text-decoration:none}
+.chips.out a{background:#ffffff12;color:var(--muted)}
+.note{color:var(--muted);font-size:13px;margin:10px 0 0}
+section.pad{margin-top:14px}
+@media (max-width:800px){
+  .tabs{position:fixed;left:0;right:0;bottom:0;z-index:40;margin:0;gap:0;padding:6px 8px calc(env(safe-area-inset-bottom,0px) + 6px);
+    background:rgba(13,11,23,.9);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);border-top:1px solid var(--line)}
+  .tabs a{flex:1;flex-direction:column;gap:3px;border:0;background:none;border-radius:14px;padding:7px 4px;font-size:11px}
+  .tabs a.on{background:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--text)}
+  .tabs a.on svg{stroke:var(--accent)}
+  .wrap{padding-bottom:112px}
+  .toast{bottom:calc(env(safe-area-inset-bottom,0px) + 86px)}
+}
+@media (max-width:560px){.ahero{gap:14px}.ahero .av,.ahero .cv{--s:92px!important}.arow .sp{width:56px}}
+
+/* ===== Phase 2: years, wrapped, stats ===== */
+.yeargrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:14px}
+.ycard{display:flex;flex-direction:column;gap:14px;padding:16px;border-radius:22px;background:var(--g);color:var(--ink);text-decoration:none;min-height:172px}
+.ycard:hover{filter:brightness(1.08)}
+.yc-top{display:flex;justify-content:space-between;align-items:baseline}
+.yc-top b{font:800 34px var(--head);letter-spacing:-.02em}.yc-top span{font-weight:700}
+.yc-art{display:flex;gap:10px;align-items:center}.yc-art small{display:block;opacity:.75}
+.yc-art strong{display:block;font:700 16px/1.15 var(--head);overflow-wrap:anywhere}
+.yc-foot{display:flex;justify-content:space-between;margin-top:auto;font-weight:600;font-size:13px;opacity:.85}
+.chartbox.tall2{height:400px}
+.ynav{display:flex;justify-content:space-between;align-items:center;margin:14px 0 4px}
+.ynav a{color:var(--muted);text-decoration:none;font-weight:600}.ynav a:hover{color:var(--text)}
+.wrapped{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-top:10px}
+.wcard{position:relative;min-height:440px;border-radius:28px;padding:26px;background:var(--g);color:var(--ink);display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.wcard small{opacity:.75;font-weight:600}
+.wcard .wbig{font:800 clamp(72px,15vw,120px)/.9 var(--head);margin:0;letter-spacing:-.04em}
+.wcard .wl{font:800 32px/1.05 var(--head);margin:0;overflow-wrap:anywhere}
+.wcard p{margin:0}
+.wcard .av{--s:132px;border:3px solid rgba(255,255,255,.55)}
+.wlist{display:grid;gap:9px;margin-top:6px}
+.wr{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:10px;align-items:center;font-weight:700}
+.wr span:first-child{opacity:.65}.wr .wn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wr em{font-style:normal;font-weight:600;opacity:.8;font-size:13px}
+.wbars{display:grid;gap:9px;margin-top:6px}
+.wbar{display:grid;grid-template-columns:96px 1fr 38px;gap:8px;align-items:center;font-size:13px;font-weight:600}
+.wbar .tr{height:9px;border-radius:99px;background:color-mix(in srgb,currentColor 20%,transparent);overflow:hidden}
+.wbar .tr i{display:block;height:100%;background:currentColor;border-radius:99px}
+.quilt{max-width:820px;display:grid;grid-template-columns:36px repeat(12,minmax(0,1fr));gap:3px;align-items:center}
+.quilt .ql{font-size:11px;color:var(--muted)}
+.quilt a,.quilt i{aspect-ratio:1;border-radius:5px;display:block}
+.quilt i{background:#ffffff0d}
+.mrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 6px;border-radius:12px;color:inherit;text-decoration:none}
+a.mrow:hover{background:var(--card2)}
+.mrow .nm{display:flex;gap:10px;align-items:center}.mrow .nm>div{min-width:0}
+.mrow small{display:block;color:var(--muted);font-size:12px}
+.mrow .v{font-weight:600;color:var(--muted);font-size:13px;white-space:nowrap;text-align:right}
+.mh{font:600 13px var(--body);color:var(--muted);margin:14px 0 2px}
+.cmp{width:100%;border-collapse:collapse;margin-top:10px;font-size:14px}
+.cmp th,.cmp td{padding:8px 6px;text-align:left;border-bottom:1px solid var(--line)}
+.cmp th{color:var(--muted);font-weight:600;font-size:13px}.cmp td.up{color:var(--up)}.cmp td.dn{color:var(--down)}
+.cmpcols{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px}
+.sbar{display:flex;height:12px;border-radius:99px;overflow:hidden;margin:6px 0 4px}
+.toolbar input[type=date]{flex:0 1 190px}
+@media (max-width:800px){
+  .wrapped{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:12px;margin:10px -16px 0;padding:0 16px 8px}
+  .wcard{flex:0 0 86%;scroll-snap-align:center;min-height:470px}
+  .tabs a{font-size:10.5px}
+}
+@media (max-width:560px){.cmpcols{grid-template-columns:1fr}.quilt{grid-template-columns:30px repeat(12,minmax(0,1fr))}}
+
+/* ===== Phase 3: decades, world map, habits ===== */
+.map{width:100%;height:auto;display:block;margin-top:6px}
+.map path{fill:color-mix(in srgb,var(--accent) var(--p,0%),#ffffff14);stroke:#0d0b17;stroke-width:.35;cursor:pointer;transition:fill .15s}
+.map path.sel{stroke:#fff;stroke-width:1.1}
+.geoinfo{margin-top:10px;padding:12px 14px;border-radius:16px;background:var(--card2)}
+.geoinfo h3{margin:0 0 4px;font:700 18px var(--head);color:var(--text)}
+.geoinfo p{margin:0 0 6px;color:var(--muted)}
+.jump{display:flex;gap:6px;overflow-x:auto;padding:4px 0 8px;margin:10px -16px 0;padding-left:16px;padding-right:16px;scrollbar-width:none}
+.jump::-webkit-scrollbar{display:none}
+.jump button{flex:none;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 14px;color:var(--muted);font-weight:600}
+.jump button:hover{color:var(--text);border-color:var(--accent)}
+.pad{scroll-margin-top:14px}
+.statrow{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 12px}
+.statrow span{padding:6px 12px;border-radius:999px;background:color-mix(in srgb,var(--accent) 16%,transparent);font-weight:600;font-size:13px}
+
+/* ===== Listening Atlas: landing, import, menu ===== */
+header.top{position:relative}
+.landing{max-width:1000px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 16px 40px}
+.lhero h1{font:800 clamp(34px,7vw,70px)/1 var(--head);letter-spacing:-.03em;margin:28px 0 10px}
+.dropzone{margin-top:18px;border:2px dashed var(--line);border-radius:26px;padding:34px 20px;text-align:center;background:var(--card);transition:border-color .15s,background .15s}
+.dropzone.over{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--card))}
+.dz-in{display:grid;gap:8px;justify-items:center}
+.dz-in svg{width:46px;height:46px;stroke:var(--accent);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.dz-in b{font:700 22px var(--head)}.dz-in span{color:var(--muted)}
+.prog{margin-top:6px}.prog p{margin:10px 0 0;color:var(--muted)}
+.pbar{height:10px;border-radius:99px;background:#ffffff14;overflow:hidden}
+.pbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:99px;transition:width .2s}
+.pbar.ind i{width:35%;animation:slide 1.1s ease-in-out infinite alternate}
+@keyframes slide{from{margin-left:0}to{margin-left:65%}}
+.err{color:var(--down);margin:14px 0 0;font-weight:600}
+.steps{margin:8px 0 0;padding-left:20px;color:var(--muted)}.steps li{margin:8px 0}
+.steps a,.linkish{color:var(--accent)}
+.center{text-align:center;margin-top:20px}
+.fine{color:var(--muted);font-size:13px;margin-top:22px;text-align:center}
+.menu{position:absolute;right:0;top:calc(100% + 6px);z-index:70;min-width:250px;background:var(--card2);border:1px solid var(--line);border-radius:18px;padding:8px;box-shadow:0 18px 40px #000a}
+.menu button{display:block;width:100%;text-align:left;border:0;background:none;padding:10px 12px;border-radius:12px;font-weight:600}
+.menu button:hover{background:#ffffff10}
+.menu .mi{padding:8px 12px;color:var(--muted);font-size:13px}
+.chipx{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap}
+.chipx .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.chipx .dot,.pbar.ind i{animation:none}}
+dialog{max-width:min(560px,92vw);border:1px solid var(--line);border-radius:24px;background:var(--card);color:var(--text);padding:24px}
+dialog::backdrop{background:#000b}
+dialog h2{margin:0 0 10px;font:700 22px var(--head)}
+dialog p,dialog li{color:var(--muted)}
+dialog li{margin:6px 0}
+@media (max-width:560px){.chipx span#enrichText{max-width:120px;overflow:hidden;text-overflow:ellipsis}}
+</style>
+</head>
+<body>
+<div class="scrim" aria-hidden="true"></div>
+<div class="landing" id="landing" hidden>
+  <header class="top"><div class="brand">Listening Atlas</div><div class="meta"><span class="ver" id="verL"></span></div></header>
+  <section class="lhero"><h1>Explore your listening history</h1>
+    <p class="secp">Drop in the data export you can request from Spotify. Everything is analysed on your own device. Nothing is uploaded and you do not need an account.</p></section>
+  <section class="dropzone" id="drop">
+    <div class="dz-in" id="dzIdle">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+      <b>Drop your export here</b><span>The .zip file from Spotify, or the .json files inside it</span>
+      <button class="more" id="pickBtn">Choose file</button>
+      <input type="file" id="file" accept=".zip,.json,application/zip,application/json" multiple hidden>
+    </div>
+    <div class="prog" id="prog" hidden><div class="pbar" id="pbar"><i id="pbarFill"></i></div><p id="progText">Reading your export</p></div>
+    <p class="err" id="importErr" hidden></p>
+    <p class="center" id="backRow" hidden><button class="more" id="backBtn">Back to my data</button></p>
+  </section>
+  <section class="grid g12" style="margin-top:14px">
+    <div class="card"><h2>How to get your data</h2>
+      <ol class="steps">
+        <li>Open <a href="https://www.spotify.com/account/privacy/" target="_blank" rel="noopener">spotify.com/account/privacy</a> and scroll to "Download your data".</li>
+        <li>Choose <b>Extended streaming history</b> (all years, the most complete). "Account data" also works but only covers the last year.</li>
+        <li>Confirm by email. Spotify can take up to 30 days to prepare it.</li>
+        <li>Download the zip from the email and drop it here without opening it.</li>
+      </ol></div>
+    <div class="card"><h2>Your privacy</h2>
+      <p class="sub" style="margin-top:8px">Your file is read in this browser and the results are kept in this browser. Names of artists and albums are looked up at Last.fm, Deezer and MusicBrainz to add genres, photos, covers, release years and countries. Nothing else leaves your device, and you can delete it all from the menu at any time.</p></div>
+  </section>
+  <p class="center"><button class="more" id="demoBtn">Try the demo with fictional data</button></p>
+  <p class="fine">Listening Atlas is an independent project and is not affiliated with or endorsed by Spotify.</p>
+</div>
+<div class="wrap" id="app" hidden>
+  <header class="top">
+    <div class="brand">Listening Atlas</div>
+    <div class="meta">
+      <button class="ver" id="ver" title="Tap for display info"></button>
+      <button class="chipx" id="enrich" hidden><span class="dot"></span><span id="enrichText"></span></button>
+      <button class="ibtn" id="menuBtn" aria-label="Menu" aria-haspopup="true" title="Menu">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+      </button>
+    </div>
+    <div class="menu" id="menu" hidden></div>
+  </header>
+  <nav class="tabs" id="tabs" aria-label="Sections">
+    <a href="#/" data-tab="overview"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Overview</span></a>
+    <a href="#/artists" data-tab="artists"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg><span>Artists</span></a>
+    <a href="#/tracks" data-tab="tracks"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg><span>Tracks</span></a>
+    <a href="#/years" data-tab="years"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>Years</span></a>
+    <a href="#/stats" data-tab="stats"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span>Stats</span></a>
+  </nav>
+  <div class="ctrl" id="ctrl">
+    <div class="seg" id="seg" role="group" aria-label="Period type"></div>
+    <div class="pick" id="pick">
+      <button id="older" aria-label="Previous period">‹</button>
+      <select id="sel" aria-label="Choose period"></select>
+      <button id="newer" aria-label="Next period">›</button>
+    </div>
+  </div>
+  <div id="v-overview">
+  <div class="demo" id="demo" hidden>This is fictional demo data. <a href="./" style="color:inherit;font-weight:700">Import your own export</a> to see your listening.</div>
+
+  <div class="hero">
+    <h1 id="title"></h1>
+    <div class="moodrow"><span class="pill" id="pill"></span><span class="muted" id="mix"></span></div>
+    <p class="ribbon-note" id="progress" hidden></p>
+    <div class="ribbonbox">
+      <div class="ribscroll" id="ribscroll"><div class="ribinner" id="ribinner">
+        <div class="ribbon" id="ribbon" role="group" aria-label="Every month: height is hours listened, color is the dominant mood"></div>
+        <div class="ribbon-labels" id="ribbonLabels" aria-hidden="true"></div>
+      </div></div>
+      <p class="ribbon-note">Each bar is a month. Height shows hours listened, color shows its dominant mood. Tap a bar to open that month. Swipe sideways for earlier years.</p>
+    </div>
+  </div>
+
+  <section class="grid g4" id="kpis"></section>
+
+  <section class="card">
+    <h2 id="stripTitle"></h2>
+    <p class="sub">Tap a tile to open that period.</p>
+    <div class="strip" id="strip"></div>
+  </section>
+
+  <h2 class="sec">Top lists</h2>
+  <section class="grid g4 lists">
+    <div class="card"><h2>Artists</h2><div id="lArtists"></div></div>
+    <div class="card"><h2>Tracks</h2><div id="lTracks"></div></div>
+    <div class="card"><h2>Albums</h2><div id="lAlbums"></div></div>
+    <div class="card"><h2>Genres</h2><div id="lGenres"></div></div>
+  </section>
+
+  <h2 class="sec">How your taste changes</h2>
+  <p class="secp">Genre mix per month, and how much your top artists change from one period to the next.</p>
+  <section class="grid g21">
+    <div class="card"><h2>Genre mix over time</h2><p class="sub">Share of listening time per month. Genres come from Last.fm tags on each artist.</p><div class="chartbox"><canvas id="cGenre"></canvas></div></div>
+    <div class="card"><h2>Artist churn</h2><p class="sub">Your top 20 compared with the period before.</p><div id="churn"></div></div>
+  </section>
+  <section class="card">
+    <h2>Variety and taste shift</h2>
+    <p class="sub">Variety is how evenly your time is spread over artists (high means many artists, low means a few on repeat). Taste shift is the share of your listening that moved to other genres since the previous month.</p>
+    <div class="chartbox"><canvas id="cTaste"></canvas></div>
+  </section>
+
+  <h2 class="sec">Mood journey</h2>
+  <p class="secp">Moods are estimated from artist tags, so treat them as a trend rather than a measurement. The page colors follow the dominant mood of the period you pick.</p>
+  <section class="grid g21">
+    <div class="card"><h2>Mood mix over time</h2><p class="sub">Share of your listening per mood, month by month.</p><div class="chartbox tall"><canvas id="cMood"></canvas></div></div>
+    <div class="card"><h2>Mood themes</h2><p class="sub" id="themeSub">Tap a theme to preview its colors.</p><div id="themes"></div></div>
+  </section>
+
+  <h2 class="sec">Habits</h2>
+  <section class="grid g12">
+    <div class="card"><h2>When you listen</h2><p class="sub">Weekday by hour of day.</p><div class="heat" id="heat"></div></div>
+    <div class="card"><h2 id="calTitle"></h2><p class="sub">Darker means more listening that day.</p><div class="calwrap"><div class="cal" id="cal"></div></div></div>
+  </section>
+
+  <h2 class="sec">Highlights</h2>
+  <section class="card"><ul class="hl-list" id="hl"></ul></section>
+
+  </div>
+  <div id="v-artists" hidden></div>
+  <div id="v-artist" hidden></div>
+  <div id="v-tracks" hidden></div>
+  <div id="v-track" hidden></div>
+  <div id="v-years" hidden></div>
+  <div id="v-year" hidden></div>
+  <div id="v-stats" hidden></div>
+
+  <footer id="foot"></footer>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<dialog id="about">
+  <h2>About and privacy</h2>
+  <p>Listening Atlas turns the data export you can request from Spotify into charts and stories about your listening. It is an independent project, not affiliated with or endorsed by Spotify.</p>
+  <ul>
+    <li>Your export is read inside this browser. It is never uploaded to a server, and there are no accounts.</li>
+    <li>Results are stored in this browser only. Clearing site data or using "Delete my data" removes them.</li>
+    <li>To add genres, photos, covers, release years and artist countries, the names of your artists and albums are sent to Last.fm, Deezer and MusicBrainz. Each service has its own privacy policy.</li>
+    <li>Only music listening is used. Podcasts and private-session listening are left out.</li>
+  </ul>
+  <button class="more" id="aboutClose">Close</button>
+</dialog>
+<script>
+const APP_VERSION = '1.0.0'; // bump this when index.html changes
+const $ = (s) => document.querySelector(s);
+const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const fmtM = (ym) => { const [y, m] = ym.split('-'); return new Date(Date.UTC(+y, +m - 1, 15)).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }); };
+const short = (ym) => MON[+ym.slice(5) - 1] + ' ' + ym.slice(2, 4);
+const hrs = (m) => (m >= 90 ? (m / 60).toFixed(m >= 600 ? 0 : 1) + ' h' : Math.round(m) + ' min');
+const lum = (h) => { const n = parseInt(h.slice(1), 16); return (0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) / 255; };
+const ink = (a, b) => ((lum(a) + lum(b)) / 2 > 0.5 ? '#0d0b17' : '#ffffff');
+const ROOT = document.documentElement;
+const FALLBACK = { label: 'Mixed', color: '#2dd4bf', color2: '#38bdf8' };
+
+let D, M, Y, S;
+const mood = (k) => D.meta.moods[k] || FALLBACK;
+const keys = () => (S.mode === 'month' ? M : S.mode === 'year' ? Y : []);
+const cur = () => (S.mode === 'month' ? D.months[S.key] : S.mode === 'year' ? D.years[S.key] : D.all);
+function prev() { const k = keys(), i = k.indexOf(S.key); return i < 1 ? null : (S.mode === 'month' ? D.months : D.years)[k[i - 1]]; }
+const periodTitle = () => (S.mode === 'month' ? fmtM(S.key) : S.mode === 'year' ? S.key : 'All time');
+const activeMood = () => S.theme || cur().dom;
+function shares(c) {
+  const e = Object.entries(c.moods || {}); const t = e.reduce((a, x) => a + x[1], 0);
+  return t ? e.map(([k, v]) => [k, v / t]).sort((a, b) => b[1] - a[1]) : [];
+}
+const inSel = (k) => (S.mode === 'month' ? k === S.key : S.mode === 'year' ? k.startsWith(S.key) : true);
+
+// ---------- controls ----------
+function setMode(m) {
+  if (m === S.mode) return;
+  const yr = S.mode === 'month' ? S.key.slice(0, 4) : S.mode === 'year' ? S.key : null;
+  S.mode = m;
+  if (m === 'month') S.key = [...M].reverse().find((k) => yr && k.startsWith(yr)) || M[M.length - 1];
+  else if (m === 'year') S.key = Y.includes(yr) ? yr : Y[Y.length - 1];
+  else S.key = null;
+  render();
+}
+function step(dir) {
+  const k = keys(), i = k.indexOf(S.key), j = i + dir;
+  if (j >= 0 && j < k.length) { S.key = k[j]; render(); }
+}
+function buildControls() {
+  const seg = $('#seg'); seg.innerHTML = '';
+  for (const [m, l] of [['month', 'Month'], ['year', 'Year'], ['all', 'All time']]) {
+    const b = el('button', m === S.mode ? 'on' : '', l); b.onclick = () => setMode(m); seg.append(b);
+  }
+  const ks = [...keys()].reverse();
+  $('#sel').innerHTML = ks.map((k) => `<option value="${k}">${S.mode === 'month' ? fmtM(k) : k}</option>`).join('');
+  if (S.key) $('#sel').value = S.key;
+  $('#pick').hidden = S.mode === 'all';
+}
+
+// ---------- sections ----------
+function theme() {
+  const m = mood(activeMood());
+  ROOT.style.setProperty('--accent', m.color); ROOT.style.setProperty('--accent2', m.color2);
+}
+function renderHero() {
+  const c = cur(); const m = mood(activeMood());
+  $('#title').textContent = periodTitle();
+  const pill = $('#pill');
+  pill.style.background = `linear-gradient(90deg,${m.color},${m.color2})`; pill.style.color = ink(m.color, m.color2);
+  pill.textContent = S.theme ? `Previewing the ${mood(S.theme).label.toLowerCase()} theme` : c.dom ? `Mostly ${mood(c.dom).label.toLowerCase()}` : 'No mood data yet';
+  const sh = shares(c).slice(0, 3);
+  $('#mix').textContent = sh.length ? sh.map(([k, v]) => `${mood(k).label} ${Math.round(v * 100)}%`).join('  ·  ') : 'Moods appear once artist details have been fetched. This takes a few minutes.';
+  const now = new Date(), ym = now.toISOString().slice(0, 7);
+  const live = (S.mode === 'month' && S.key === ym) || (S.mode === 'year' && S.key === ym.slice(0, 4)) || (S.mode === 'all' && D.meta.lastYm === ym);
+  const p = $('#progress'); p.hidden = !live; p.textContent = 'This period is still in progress, so the numbers will keep growing.';
+}
+function renderRibbon() {
+  const box = $('#ribbon'); box.innerHTML = ''; box.className = 'ribbon' + (S.mode === 'all' ? ' allsel' : '');
+  const max = Math.max(...M.map((k) => D.months[k].hours), 1);
+  const lab = $('#ribbonLabels'); lab.innerHTML = '';
+  M.forEach((k) => {
+    const a = D.months[k], m = mood(a.dom);
+    const b = el('button', inSel(k) ? 'sel' : '');
+    b.style.height = Math.max(12, Math.round((a.hours / max) * 100)) + '%';
+    b.style.background = `linear-gradient(180deg,${m.color},${m.color2})`;
+    b.title = `${fmtM(k)}: ${a.hours} h, ${a.dom ? m.label.toLowerCase() : 'no mood data'}`;
+    b.setAttribute('aria-label', b.title);
+    b.onclick = () => { S.mode = 'month'; S.key = k; render(); };
+    box.append(b);
+    lab.append(el('span', '', k.endsWith('-01') || k === M[0] ? k.slice(0, 4) : ''));
+  });
+  $('#ribinner').style.setProperty('--n', M.length);
+  const sc = $('#ribscroll'), sels = box.querySelectorAll('button.sel');
+  if (sels.length && sels.length < M.length) {
+    const r0 = sc.getBoundingClientRect(), a = sels[0].getBoundingClientRect(), z = sels[sels.length - 1].getBoundingClientRect();
+    sc.scrollLeft = sc.scrollLeft + ((a.left + z.right) / 2 - (r0.left + r0.width / 2));
+  } else if (S.mode === 'all') sc.scrollLeft = sc.scrollWidth;
+}
+function delta(a, b) { return b ? Math.round(((a - b) / b) * 100) : null; }
+function renderKpis() {
+  const c = cur(), p = prev();
+  const first = S.mode === 'month' ? S.key === D.meta.firstYm : S.mode === 'year' ? S.key === D.meta.firstYm.slice(0, 4) : false;
+  const vs = S.mode === 'month' ? 'vs previous month' : 'vs previous year';
+  const card = (l, v, d, note) => {
+    let dd = '';
+    if (d != null) dd = `<div class="d ${d > 0 ? 'up' : d < 0 ? 'dn' : 'flat'}">${d > 0 ? '▲' : d < 0 ? '▼' : '–'} ${Math.abs(d)}% ${vs}</div>`;
+    else if (note) dd = `<div class="d note">${note}</div>`;
+    return `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div>${dd}</div>`;
+  };
+  const n = (x) => x.toLocaleString('en-GB');
+  $('#kpis').innerHTML = [
+    card('Hours listened', n(c.hours), delta(c.hours, p?.hours)),
+    card('Tracks played', n(c.plays), delta(c.plays, p?.plays)),
+    card('Different artists', n(c.artists), delta(c.artists, p?.artists)),
+    card('New artists', n(c.newArtists), first ? null : delta(c.newArtists, p?.newArtists), first || S.mode === 'all' ? 'First time heard in this period' : ''),
+    card('Variety', `${c.eff} artists`, null, 'Like spreading your time evenly over this many'),
+    card('Top genre', esc(c.genres[0]?.[0] || '–'), null, c.genres[0] ? hrs(c.genres[0][1]) : ''),
+    card('Taste shift', c.tasteShift != null ? c.tasteShift + '%' : '–', null, c.tasteShift != null ? 'Of listening moved to other genres ' + vs : 'Needs a previous period'),
+    card('Skip rate', c.skipRate != null ? Math.round(c.skipRate * 100) + '%' : '–', null, c.skipRate != null ? 'Of tracks skipped (tracked from 2017)' : 'Tracked from 2017'),
+  ].join('');
+}
+function renderStrip() {
+  const box = $('#strip'); box.innerHTML = '';
+  let items;
+  if (S.mode === 'all') { $('#stripTitle').textContent = 'Artist of the year'; items = Y.map((k) => ({ k, label: k, a: D.years[k], mode: 'year' })); }
+  else {
+    const yr = S.mode === 'month' ? S.key.slice(0, 4) : S.key;
+    $('#stripTitle').textContent = `Artist of the month, ${yr}`;
+    items = M.filter((k) => k.startsWith(yr)).map((k) => ({ k, label: MON[+k.slice(5) - 1], a: D.months[k], mode: 'month' }));
+  }
+  for (const it of items) {
+    const m = mood(it.a.dom), top = it.a.topArtists[0];
+    const b = el('button', 'tile' + (it.k === S.key ? ' sel' : ''), `<small>${it.label}</small><b>${esc(top ? top.n : '–')}</b><span>${top ? hrs(top.m) : ''}</span>`);
+    b.style.background = `linear-gradient(135deg,${m.color},${m.color2})`; b.style.color = ink(m.color, m.color2);
+    b.onclick = () => { S.mode = it.mode; S.key = it.k; render(); };
+    box.append(b);
+  }
+}
+function list(sel, items) {
+  const box = $(sel); const max = Math.max(...items.map((x) => x.v), 1);
+  box.innerHTML = items.length ? items.map((x, i) => {
+    const tag = x.href ? 'a' : 'div';
+    return `<${tag} class="row${x.pic ? ' has-av' : ''}"${x.href ? ` href="${x.href}"` : ''}><span class="rk">${i + 1}</span>${x.pic || ''}<div class="nm"><b>${esc(x.n)}</b>${x.s ? `<small>${esc(x.s)}</small>` : ''}</div><span class="val">${x.t}</span><div class="bar"><i style="width:${Math.max(3, Math.round((x.v / max) * 100))}%"></i></div></${tag}>`;
+  }).join('') : '<p class="muted">Nothing here yet.</p>';
+}
+function renderLists() {
+  const c = cur();
+  list('#lArtists', c.topArtists.slice(0, 10).map((x) => ({ n: x.n, s: `${x.p} plays`, v: x.m, t: hrs(x.m), pic: avatar(x.n, 40), href: '#/artist/' + enc(x.n) })));
+  list('#lTracks', c.topTracks.map((x) => ({ n: x.n, s: x.a, v: x.p, t: `${x.p}×`, href: '#/track/' + enc(x.n) + '/' + enc(x.a) })));
+  list('#lAlbums', c.topAlbums.map((x) => ({ n: x.n, s: x.a, v: x.m, t: hrs(x.m), pic: cover(x.n, x.a, 40) })));
+  list('#lGenres', c.genres.slice(0, 10).map(([g, m]) => ({ n: g, s: '', v: m, t: hrs(m) })));
+}
+function renderChurn() {
+  const c = cur(), box = $('#churn');
+  if (S.mode === 'all' || !c.churn) { box.innerHTML = '<p class="muted">Pick a month or year after the first one to see how your top 20 artists changed.</p>'; return; }
+  const ch = c.churn, ks = keys(), pk = ks[ks.indexOf(S.key) - 1];
+  const dots = Array.from({ length: ch.of }, (_, i) => `<i class="${i < ch.kept ? 'k' : ''}"></i>`).join('');
+  box.innerHTML = `<div class="big">${ch.kept}<span> of ${ch.of}</span></div>
+    <p class="muted">of your top artists were also in your top 20 in ${S.mode === 'month' ? fmtM(pk) : pk}.</p><div class="dots">${dots}</div>
+    ${ch.newIn.length ? `<h3>New in your top 20</h3><div class="chips">${ch.newIn.map((n) => `<a href="#/artist/${enc(n)}">${esc(n)}</a>`).join('')}</div>` : ''}
+    ${ch.out.length ? `<h3>Dropped out</h3><div class="chips out">${ch.out.map((n) => `<a href="#/artist/${enc(n)}">${esc(n)}</a>`).join('')}</div>` : ''}`;
+}
+function renderThemes() {
+  const c = cur(), box = $('#themes'); box.innerHTML = '';
+  const map = Object.fromEntries(shares(c));
+  Object.keys(D.meta.moods).sort((a, b) => (map[b] || 0) - (map[a] || 0)).forEach((k) => {
+    const m = mood(k), p = Math.round((map[k] || 0) * 100);
+    const b = el('button', 'theme' + (activeMood() === k ? ' on' : ''),
+      `<span class="sw" style="background:linear-gradient(135deg,${m.color},${m.color2})"></span><span class="tn">${m.label}</span><span class="tbar"><i style="width:${p}%;background:linear-gradient(90deg,${m.color},${m.color2})"></i></span><span class="tp">${p}%</span>`);
+    b.onclick = () => { S.theme = S.theme === k ? null : k; render(); };
+    box.append(b);
+  });
+  $('#themeSub').textContent = S.theme ? 'Previewing a theme. Tap it again to go back to the mood of this period.' : 'Tap a theme to preview its colors.';
+}
+function renderHeat() {
+  const hm = cur().hm, max = Math.max(...hm, 1);
+  const dn = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  let h = '<div></div>' + Array.from({ length: 24 }, (_, i) => `<div class="hl">${i % 6 === 0 ? i : ''}</div>`).join('');
+  for (let d = 0; d < 7; d++) {
+    h += `<div class="dl">${dn[d]}</div>`;
+    for (let x = 0; x < 24; x++) { const v = hm[d * 24 + x]; h += `<i style="--p:${v ? Math.round(12 + 88 * (v / max)) : 0}%" title="${dn[d]} ${x}:00, ${hrs(v)}"></i>`; }
+  }
+  $('#heat').innerHTML = h;
+}
+function renderCal() {
+  const box = $('#cal'); box.innerHTML = '';
+  const map = {}; let start, end;
+  const add = (ym) => { const a = D.months[ym]; if (!a || !a.days) return; for (const [d, v] of Object.entries(a.days)) map[`${ym}-${String(d).padStart(2, '0')}`] = v; };
+  if (S.mode === 'month') {
+    add(S.key); const [y, m] = S.key.split('-').map(Number);
+    start = Date.UTC(y, m - 1, 1); end = Date.UTC(y, m, 0); box.className = 'cal big'; $('#calTitle').textContent = 'Day by day';
+  } else if (S.mode === 'year') {
+    M.filter((k) => k.startsWith(S.key)).forEach(add); start = Date.UTC(+S.key, 0, 1); end = Date.UTC(+S.key, 11, 31); box.className = 'cal'; $('#calTitle').textContent = 'Year at a glance';
+  } else {
+    M.forEach(add); const [y, m] = D.meta.lastYm.split('-').map(Number); end = Date.UTC(y, m, 0); start = end - 364 * 864e5; box.className = 'cal'; $('#calTitle').textContent = 'Last 12 months';
+  }
+  const max = Math.max(...Object.values(map), 1);
+  const big = S.mode === 'month'; const mc = mood(activeMood());
+  const pad = (new Date(start).getUTCDay() + 6) % 7;
+  for (let i = 0; i < pad; i++) box.append(el('i', 'empty'));
+  const total = Math.round((end - start) / 864e5) + 1;
+  for (let i = 0; i < total; i++) {
+    const d = new Date(start + i * 864e5), k = d.toISOString().slice(0, 10), v = map[k] || 0;
+    const p = v ? Math.round(18 + 82 * (v / max)) : 0;
+    const c = el('i', '', big ? String(d.getUTCDate()) : '');
+    c.style.setProperty('--p', p + '%'); c.title = `${k}: ${hrs(v)}`;
+    if (big) c.style.color = p > 55 ? ink(mc.color, mc.color) : '#cfcbe6';
+    box.append(c);
+  }
+}
+function renderHighlights() {
+  let h = D.highlights || [];
+  h = S.mode === 'month' ? h.filter((x) => x.ym === S.key) : S.mode === 'year' ? h.filter((x) => x.ym.startsWith(S.key)) : h.slice(0, 10);
+  $('#hl').innerHTML = h.length ? h.map((x) => `<li>${esc(x.text)}${x.ym.length === 7 && S.mode !== 'month' ? `<small>${fmtM(x.ym)}</small>` : ''}</li>`).join('')
+    : '<li>No notable changes in this period yet. Highlights appear when something shifts between periods.</li>';
+}
+function renderOverview() {
+  buildControls(); theme(); renderHero(); renderRibbon(); renderKpis(); renderStrip(); renderLists();
+  renderChurn(); renderThemes(); renderHeat(); renderCal(); renderHighlights();
+}
+function render() { if (R.view === 'overview') renderOverview(); }
+
+// ---------- timeline charts (built once) ----------
+function buildCharts() {
+  if (!window.Chart) return;
+  ['#cGenre', '#cMood', '#cTaste'].forEach((id) => Chart.getChart($(id))?.destroy());
+  Chart.defaults.color = '#a9a3c4'; Chart.defaults.font.family = "'Instrument Sans',system-ui,sans-serif"; Chart.defaults.borderColor = '#2a2540';
+  const labels = M.map(short);
+  const base = {
+    responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, boxHeight: 12, usePointStyle: true } } },
+    scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 12, maxRotation: 0 } } },
+  };
+  const stacked = (id, sets) => new Chart($(id), {
+    type: 'line', data: { labels, datasets: sets },
+    options: {
+      ...base,
+      plugins: { ...base.plugins, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y.toFixed(0)}%` } } },
+      scales: { ...base.scales, y: { stacked: true, min: 0, max: 100, ticks: { callback: (v) => v + '%' } } },
+    },
+  });
+  const area = (label, data, color, i) => ({ label, data, backgroundColor: color + 'cc', borderColor: color, borderWidth: 1.5, fill: i === 0 ? 'origin' : '-1', pointRadius: 0, tension: 0.35 });
+
+  // genres
+  const peak = new Map();
+  M.forEach((k) => {
+    const gs = D.months[k].genres, s = gs.reduce((a, x) => a + x[1], 0);
+    gs.forEach(([g, v]) => peak.set(g, Math.max(peak.get(g) || 0, s ? v / s : 0)));
+  });
+  const topG = [...peak.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map((e) => e[0]);
+  const PAL = ['#38bdf8', '#f97316', '#facc15', '#a78bfa', '#fb7185', '#2dd4bf', '#a3e635', '#f0abfc', '#60a5fa', '#fdba74', '#64748b'];
+  const gsets = topG.map((g, i) => area(g, M.map((k) => {
+    const gs = D.months[k].genres, s = gs.reduce((a, x) => a + x[1], 0), f = gs.find((x) => x[0] === g);
+    return s ? (100 * (f ? f[1] : 0)) / s : 0;
+  }), PAL[i], i));
+  gsets.push(area('Other', M.map((k) => {
+    const gs = D.months[k].genres, s = gs.reduce((a, x) => a + x[1], 0);
+    const inTop = gs.filter((x) => topG.includes(x[0])).reduce((a, x) => a + x[1], 0);
+    return s ? (100 * (s - inTop)) / s : 0;
+  }), PAL[10], gsets.length));
+  stacked('#cGenre', gsets);
+
+  // moods
+  const msets = [];
+  Object.keys(D.meta.moods).forEach((k) => {
+    const data = M.map((ym) => { const mo = D.months[ym].moods, t = Object.values(mo).reduce((a, x) => a + x, 0); return t ? (100 * (mo[k] || 0)) / t : 0; });
+    if (data.some((x) => x > 0)) msets.push(area(mood(k).label, data, mood(k).color, msets.length));
+  });
+  stacked('#cMood', msets);
+
+  // variety + shift
+  new Chart($('#cTaste'), {
+    data: {
+      labels, datasets: [
+        { type: 'bar', label: 'Taste shift', data: M.map((k) => D.months[k].tasteShift), backgroundColor: '#f0abfc99', borderRadius: 5 },
+        { type: 'line', label: 'Variety', data: M.map((k) => Math.round(D.months[k].variety * 100)), borderColor: '#2dd4bf', backgroundColor: '#2dd4bf', tension: 0.35, pointRadius: 2 },
+      ],
+    },
+    options: { ...base, scales: { ...base.scales, y: { min: 0, max: 100, ticks: { callback: (v) => v + '%' } } } },
+  });
+}
+
+
+// ---------- helpers for the artist / track views ----------
+const $$ = (s) => [...document.querySelectorAll(s)];
+const enc = encodeURIComponent;
+const SEP = '\u2016';
+const fold = (s) => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const n0 = (x) => Math.round(x).toLocaleString('en-GB');
+const fmtD = (d) => new Date(d + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+function ago(d) {
+  const days = (Date.now() - Date.parse(d + 'T12:00:00Z')) / 864e5;
+  return days < 45 ? `${Math.max(1, Math.round(days))} days ago` : days < 540 ? `${Math.round(days / 30.4)} months ago` : `${(days / 365.25).toFixed(1)} years ago`;
+}
+const parseYrs = (s) => { const o = {}; if (s) for (const p of s.split(',')) { const i = p.indexOf(':'); o[p.slice(0, i)] = +p.slice(i + 1); } return o; };
+const kpi = (l, v, note) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div>${note ? `<div class="d note">${note}</div>` : ''}</div>`;
+const acc = () => getComputedStyle(ROOT).getPropertyValue('--accent').trim() || '#2dd4bf';
+function setAccent(k) { const m = k ? mood(k) : mood(activeMood()); ROOT.style.setProperty('--accent', m.color); ROOT.style.setProperty('--accent2', m.color2); }
+
+// ---------- pictures: Deezer hash, "i:<iTunes url>" or nothing ----------
+let IM = { a: {}, l: {} };
+const hue = (s) => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+const initials = (s) => String(s).replace(/[^\p{L}\p{N} ]/gu, '').trim().split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase() || '?';
+function imgUrl(code, kind, px) {
+  if (!code) return null;
+  const s = px <= 120 ? 120 : px <= 250 ? 250 : 500;
+  if (code.startsWith('i:')) { const t = s === 120 ? 120 : s === 250 ? 300 : 600; return `${code.slice(2)}/${t}x${t}bb.jpg`; }
+  return `https://cdn-images.dzcdn.net/images/${kind === 'a' ? 'artist' : 'cover'}/${code}/${s}x${s}-000000-80-0-0.jpg`;
+}
+const picHTML = (cls, label, u, size) => `<span class="${cls}" style="--h:${hue(label)};--s:${size}px"><b>${esc(initials(label))}</b>${u ? `<img src="${u}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}</span>`;
+const avatar = (name, size = 44) => picHTML('av', name, imgUrl(IM.a[name], 'a', size * 2), size);
+const cover = (album, artist, size = 44) => picHTML('cv', album || '?', imgUrl(IM.l[artist + SEP + album], 'l', size * 2), size);
+async function loadImages(quiet) {
+  if (MODE === 'demo' || !STORE) return;
+  try {
+    const v = await STORE.get('images');
+    if (v) { IM = v; if (!quiet) route({ keepScroll: true }); }
+  } catch (e) { /* pictures are optional */ }
+}
+
+// ---------- lazy data files (read from this device, or from the demo folder) ----------
+const CACHE = {};
+let MODE = 'local', STORE = null;
+async function readSource(name) {
+  if (MODE === 'demo') {
+    const r = await fetch(`demo/${name}.json`);
+    if (!r.ok) throw new Error(`${name} (${r.status})`);
+    return r.json();
+  }
+  const v = await STORE.get(name);
+  if (v == null) throw new Error(`${name} is not available yet`);
+  return typeof v === 'string' ? JSON.parse(v) : v;
+}
+function getData(name) {
+  if (!CACHE[name]) CACHE[name] = readSource(name).catch((e) => { delete CACHE[name]; throw e; });
+  return CACHE[name];
+}
+let AX = null, TX = null;
+function prepArtists(rows) {
+  if (AX && AX.src === rows) return AX;
+  const list = rows.map((r, i) => ({ n: r[0], m: r[1], p: r[2], f: r[3], l: r[4], ys: r[5], q: fold(r[0]), rank: i + 1 }));
+  return (AX = { src: rows, list, map: new Map(list.map((x) => [x.n, x])) });
+}
+function prepTracks(rows) {
+  if (TX && TX.src === rows) return TX;
+  const list = rows.map((r) => ({ n: r[0], a: r[1], al: r[2], p: r[3], m: r[4], f: r[5], l: r[6], ys: r[7], q: fold(r[0] + ' ' + r[1]) }));
+  return (TX = { src: rows, list, map: new Map(list.map((x) => [x.n + '\u0001' + x.a, x])) });
+}
+function spark(ys) {
+  const o = parseYrs(ys), Y0 = +Y[0], Y1 = +Y[Y.length - 1], w = 4, g = 1;
+  let mx = 1; for (const v of Object.values(o)) mx = Math.max(mx, v);
+  let rects = '';
+  for (let y = Y0; y <= Y1; y++) { const v = o[y] || 0; if (v) { const h = Math.max(2, Math.round((24 * v) / mx)); rects += `<rect x="${(y - Y0) * (w + g)}" y="${26 - h}" width="${w}" height="${h}" rx="1"/>`; } }
+  return `<svg class="sp" viewBox="0 0 ${(Y1 - Y0 + 1) * (w + g)} 26" preserveAspectRatio="none" fill="currentColor" aria-hidden="true">${rects}</svg>`;
+}
+const CH = {};
+function killChart(k) { if (CH[k]) { CH[k].destroy(); delete CH[k]; } }
+function barChart(k, sel, labels, data, unit) {
+  killChart(k);
+  if (!window.Chart) return;
+  CH[k] = new Chart($(sel), {
+    type: 'bar',
+    data: { labels, datasets: [{ data, backgroundColor: acc(), borderRadius: 4 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${c.parsed.y} ${unit}` } } },
+      scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 12, maxRotation: 0 } }, y: { ticks: { callback: (v) => v + ' ' + unit } } },
+    },
+  });
+}
+const chipBar = (id, items, sel) => `<div class="chipbar" id="${id}">${items.map(([k, l]) => `<button data-k="${esc(k)}" class="${k === sel ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>`;
+function wireChips(id, fn) { $$(`#${id} button`).forEach((b) => (b.onclick = () => { $$(`#${id} button`).forEach((x) => x.classList.toggle('on', x === b)); fn(b.dataset.k); })); }
+const yearOptions = () => '<option value="">All time</option>' + [...Y].reverse().map((y) => `<option>${y}</option>`).join('');
+
+// ---------- Artists tab ----------
+const AS = { q: '', year: '', sort: 'hours', shown: 60 };
+const A_SORTS = [['hours', 'Most hours'], ['plays', 'Most plays'], ['recent', 'Recently played'], ['new', 'Newest finds']];
+function artistsShell() {
+  const box = $('#v-artists');
+  if (box.dataset.built) return;
+  box.dataset.built = 1;
+  box.innerHTML = `<h2 class="sec first">Artists</h2><p class="secp" id="acount">Loading…</p>
+    <div class="toolbar"><input id="aq" type="search" placeholder="Search artists" autocomplete="off" aria-label="Search artists"><select id="ayear" aria-label="Year">${yearOptions()}</select></div>
+    ${chipBar('asort', A_SORTS, AS.sort)}
+    <div class="card listcard"><div id="alist"></div><button class="more" id="amore" hidden>Show more</button></div>`;
+  $('#aq').oninput = (e) => { AS.q = e.target.value; AS.shown = 60; renderArtistList(); };
+  $('#ayear').onchange = (e) => { AS.year = e.target.value; AS.shown = 60; renderArtistList(); };
+  wireChips('asort', (k) => { AS.sort = k; AS.shown = 60; renderArtistList(); });
+  $('#amore').onclick = () => { AS.shown += 60; renderArtistList(); };
+}
+function renderArtistList() {
+  if (!AX) return;
+  const q = fold(AS.q.trim()), yr = AS.year, rows = [];
+  for (const x of AX.list) {
+    if (q && !x.q.includes(q)) continue;
+    if (yr) { const v = parseYrs(x.ys)[yr] || 0; if (!v) continue; x._y = v; }
+    rows.push(x);
+  }
+  const key = { hours: (x) => (yr ? x._y : x.m), plays: (x) => x.p, recent: (x) => x.l, new: (x) => x.f }[AS.sort];
+  rows.sort((a, b) => { const A = key(a), B = key(b); return A < B ? 1 : A > B ? -1 : 0; });
+  const shown = rows.slice(0, AS.shown);
+  $('#acount').textContent = `${n0(rows.length)} ${rows.length === 1 ? 'artist' : 'artists'}${yr ? ` in ${yr}` : ' in total'}${q ? ' matching your search' : ''}.`;
+  $('#alist').innerHTML = shown.map((x) => `<a class="arow" href="#/artist/${enc(x.n)}">${avatar(x.n, 44)}<div class="nm"><b>${esc(x.n)}</b><small>${yr ? `${hrs(x._y)} in ${yr} · ${hrs(x.m)} total` : `${hrs(x.m)} · ${n0(x.p)} plays · ${x.f.slice(0, 4)}–${x.l.slice(0, 4)}`}</small></div>${spark(x.ys)}</a>`).join('') || '<p class="muted" style="padding:14px">No artists match.</p>';
+  $('#amore').hidden = rows.length <= shown.length;
+}
+async function viewArtists() {
+  artistsShell();
+  const idx = await getData('artist-index');
+  prepArtists(idx); renderArtistList();
+}
+
+// ---------- Artist page ----------
+async function viewArtist(name) {
+  const box = $('#v-artist');
+  killChart('artist');
+  box.innerHTML = '<p class="muted" style="margin-top:24px">Loading…</p>';
+  const [idx, det] = await Promise.all([getData('artist-index'), getData('artist-details').catch(() => ({}))]);
+  const ax = prepArtists(idx);
+  const row = ax.map.get(name) || ax.list.find((x) => x.q === fold(name));
+  if (row) name = row.n;
+  if (!row) { box.innerHTML = `<a class="back" href="#/artists">‹ Artists</a><h2 class="sec first">${esc(name)}</h2><p class="secp">This artist is not in your history.</p>`; return; }
+  const d = det[name];
+  setAccent(d && d.md);
+  const yo = parseYrs(row.ys), years = Object.keys(yo).sort();
+  let peakL = 'Peak year', peakV, peakN;
+  if (d && Object.keys(d.mo).length) { const [k, v] = Object.entries(d.mo).sort((a, b) => b[1] - a[1])[0]; peakL = 'Peak month'; peakV = fmtM(k); peakN = hrs(v); }
+  else { const [k, v] = Object.entries(yo).sort((a, b) => b[1] - a[1])[0]; peakV = k; peakN = hrs(v); }
+  const md = d && d.md ? mood(d.md) : null;
+  const tags = [...(d ? d.tg : []).map((g) => `<span class="tag">${esc(g)}</span>`), md ? `<span class="tag" style="background:linear-gradient(90deg,${md.color},${md.color2});color:${ink(md.color, md.color2)}">${md.label} mood</span>` : ''].join('');
+  const detailN = Object.keys(det).length;
+  box.innerHTML = `<a class="back" href="#/artists">‹ Artists</a>
+    <div class="ahero">${avatar(name, 128)}<div><h1>${esc(name)}</h1><div class="tagrow"><span class="tag">#${n0(row.rank)} by hours</span>${tags}</div></div></div>
+    <section class="grid g4">
+      ${kpi('Hours listened', hrs(row.m))}${kpi('Plays', n0(row.p))}
+      ${kpi('First played', fmtD(row.f), ago(row.f))}${kpi('Last played', fmtD(row.l), ago(row.l))}
+      ${kpi('Active years', `${years.length}`, `${years[0]}–${years[years.length - 1]}`)}${kpi(peakL, peakV, peakN)}
+      ${kpi('Skip rate', d && d.sk != null ? Math.round(d.sk * 100) + '%' : '–', d && d.sk != null ? 'Of tracks skipped' : 'Tracked from 2017')}${kpi('Avg per play', Math.round(row.m / row.p * 10) / 10 + ' min')}
+    </section>
+    <section class="card pad"><div class="cardhead"><h2>Listening over time</h2><div id="amodeBox"></div></div><div class="chartbox"><canvas id="cArtist"></canvas></div></section>
+    <section class="grid g12 pad">
+      <div class="card"><div class="cardhead"><h2>Top tracks</h2></div><div id="ayearsBox"></div><div id="atracks"></div></div>
+      <div class="card"><h2>Albums</h2><div id="aalbums" style="margin-top:10px"></div></div>
+    </section>`;
+
+  // chart: monthly when the span is short, otherwise yearly
+  const [fy, fm] = row.f.slice(0, 7).split('-').map(Number), [ly, lm] = row.l.slice(0, 7).split('-').map(Number);
+  const span = (ly - fy) * 12 + (lm - fm) + 1;
+  const drawChart = (mode) => {
+    if (mode === 'month' && d) {
+      const labels = [], data = []; let y = fy, m = fm;
+      while (y < ly || (y === ly && m <= lm)) { const k = `${y}-${String(m).padStart(2, '0')}`; labels.push(short(k)); data.push(+(((d.mo[k] || 0) / 60).toFixed(2))); if (++m > 12) { m = 1; y++; } }
+      barChart('artist', '#cArtist', labels, data, 'h');
+    } else {
+      const labels = [], data = [];
+      for (let y = fy; y <= ly; y++) { labels.push(String(y)); data.push(+((((yo[y] || 0)) / 60).toFixed(1))); }
+      barChart('artist', '#cArtist', labels, data, 'h');
+    }
+  };
+  const defMode = d && span <= 48 ? 'month' : 'year';
+  if (d && span > 3) { $('#amodeBox').innerHTML = chipBar('amode', [['month', 'By month'], ['year', 'By year']], defMode); wireChips('amode', drawChart); }
+  drawChart(defMode);
+
+  // top tracks (filter by year) and albums
+  const tracks = d ? d.t.map((x) => ({ n: x[0], p: x[1], m: x[2], y: parseYrs(x[3]), al: x[4] })) : [];
+  const drawTracks = (yr) => {
+    let items = tracks;
+    if (yr) items = tracks.filter((x) => x.y[yr]).sort((a, b) => b.y[yr] - a.y[yr]);
+    const max = Math.max(...items.map((x) => (yr ? x.y[yr] : x.p)), 1);
+    $('#atracks').innerHTML = items.length ? items.slice(0, 15).map((x, i) => { const v = yr ? x.y[yr] : x.p;
+      return `<a class="row has-av" href="#/track/${enc(x.n)}/${enc(name)}"><span class="rk">${i + 1}</span>${cover(x.al, name, 40)}<div class="nm"><b>${esc(x.n)}</b>${x.al ? `<small>${esc(x.al)}</small>` : ''}</div><span class="val">${v}×</span><div class="bar"><i style="width:${Math.max(3, Math.round((v / max) * 100))}%"></i></div></a>`; }).join('')
+      : '<p class="note">No tracks from this year among the most played.</p>';
+  };
+  if (d) {
+    if (years.length > 1) { $('#ayearsBox').innerHTML = chipBar('ayears', [['', 'All time'], ...years.map((y) => [y, y])], ''); wireChips('ayears', drawTracks); }
+    drawTracks('');
+    const al = d.al, amax = Math.max(...al.map((x) => x[2]), 1);
+    $('#aalbums').innerHTML = al.length ? al.map((x, i) => `<div class="row has-av"><span class="rk">${i + 1}</span>${cover(x[0], name, 40)}<div class="nm"><b>${esc(x[0])}</b><small>${x[1]} plays</small></div><span class="val">${hrs(x[2])}</span><div class="bar"><i style="width:${Math.max(3, Math.round((x[2] / amax) * 100))}%"></i></div></div>`).join('') : '<p class="note">No album information.</p>';
+  } else {
+    $('#atracks').innerHTML = `<p class="note">The track and album breakdown is available for your ${n0(detailN)} most played artists.</p>`;
+    $('#aalbums').innerHTML = '<p class="note">Not available for this artist.</p>';
+  }
+}
+
+// ---------- Tracks tab ----------
+const TS = { q: '', year: '', sort: 'plays', shown: 60 };
+const T_SORTS = [['plays', 'Most plays'], ['hours', 'Most hours'], ['recent', 'Recently played'], ['new', 'Newest finds']];
+function tracksShell() {
+  const box = $('#v-tracks');
+  if (box.dataset.built) return;
+  box.dataset.built = 1;
+  box.innerHTML = `<h2 class="sec first">Tracks</h2><p class="secp" id="tcount">Loading…</p>
+    <div class="toolbar"><input id="tq" type="search" placeholder="Search tracks or artists" autocomplete="off" aria-label="Search tracks"><select id="tyear" aria-label="Year">${yearOptions()}</select></div>
+    ${chipBar('tsort', T_SORTS, TS.sort)}
+    <div class="card listcard"><div id="tlist"></div><button class="more" id="tmore" hidden>Show more</button></div>
+    <p class="note">Your most played tracks: the top 1,500 of all time plus the top 100 of every year.</p>`;
+  $('#tq').oninput = (e) => { TS.q = e.target.value; TS.shown = 60; renderTrackList(); };
+  $('#tyear').onchange = (e) => { TS.year = e.target.value; TS.shown = 60; renderTrackList(); };
+  wireChips('tsort', (k) => { TS.sort = k; TS.shown = 60; renderTrackList(); });
+  $('#tmore').onclick = () => { TS.shown += 60; renderTrackList(); };
+}
+function renderTrackList() {
+  if (!TX) return;
+  const q = fold(TS.q.trim()), yr = TS.year, rows = [];
+  for (const x of TX.list) {
+    if (q && !x.q.includes(q)) continue;
+    if (yr) { const v = parseYrs(x.ys)[yr] || 0; if (!v) continue; x._y = v; }
+    rows.push(x);
+  }
+  const key = { plays: (x) => (yr ? x._y : x.p), hours: (x) => x.m, recent: (x) => x.l, new: (x) => x.f }[TS.sort];
+  rows.sort((a, b) => { const A = key(a), B = key(b); return A < B ? 1 : A > B ? -1 : 0; });
+  const shown = rows.slice(0, TS.shown);
+  $('#tcount').textContent = `${n0(rows.length)} ${rows.length === 1 ? 'track' : 'tracks'}${yr ? ` played in ${yr}` : ''}${q ? ' matching your search' : ''}.`;
+  $('#tlist').innerHTML = shown.map((x) => `<a class="trow" href="#/track/${enc(x.n)}/${enc(x.a)}">${cover(x.al, x.a, 44)}<div class="nm"><b>${esc(x.n)}</b><small>${esc(x.a)}</small></div><span class="val">${yr ? x._y : x.p}×<br><small>${yr ? `${x.p}× total` : hrs(x.m)}</small></span></a>`).join('') || '<p class="muted" style="padding:14px">No tracks match.</p>';
+  $('#tmore').hidden = rows.length <= shown.length;
+}
+async function viewTracks() {
+  tracksShell();
+  prepTracks(await getData('track-index')); renderTrackList();
+}
+
+// ---------- Track page ----------
+async function viewTrack(n, a) {
+  const box = $('#v-track');
+  killChart('track');
+  box.innerHTML = '<p class="muted" style="margin-top:24px">Loading…</p>';
+  const [rows, det] = await Promise.all([getData('track-index'), getData('artist-details').catch(() => ({}))]);
+  const d = det[a];
+  setAccent(d && d.md);
+  let t = prepTracks(rows).map.get(n + '\u0001' + a);
+  if (!t && d) { const x = d.t.find((z) => z[0] === n); if (x) t = { n, a, al: x[4] || '', p: x[1], m: x[2], f: null, l: null, ys: x[3] }; }
+  if (!t) t = { n, a, al: '', p: null, m: null, f: null, l: null, ys: '' };
+  const yo = parseYrs(t.ys), years = Object.keys(yo).sort();
+  const others = d ? d.t.filter((x) => x[0] !== n).slice(0, 6) : [];
+  box.innerHTML = `<a class="back" href="javascript:history.back()">‹ Back</a>
+    <div class="ahero">${cover(t.al, a, 128)}<div><h1>${esc(n)}</h1><p><a href="#/artist/${enc(a)}">${esc(a)}</a>${t.al ? ` · ${esc(t.al)}` : ''}</p></div></div>
+    ${t.p != null ? `<section class="grid g4">${kpi('Plays', n0(t.p))}${kpi('Hours listened', hrs(t.m))}${t.f ? kpi('First played', fmtD(t.f), ago(t.f)) : ''}${t.l ? kpi('Last played', fmtD(t.l), ago(t.l)) : ''}</section>`
+      : '<p class="secp">This track is not among your most played, so there are no detailed numbers for it.</p>'}
+    ${years.length ? '<section class="card pad"><h2>Plays per year</h2><div class="chartbox" style="height:240px"><canvas id="cTrack"></canvas></div></section>' : ''}
+    ${others.length ? `<section class="card pad"><h2>More from ${esc(a)}</h2><div style="margin-top:8px">${others.map((x) => `<a class="trow" href="#/track/${enc(x[0])}/${enc(a)}">${cover(x[4], a, 44)}<div class="nm"><b>${esc(x[0])}</b>${x[4] ? `<small>${esc(x[4])}</small>` : ''}</div><span class="val">${x[1]}×</span></a>`).join('')}</div></section>` : ''}`;
+  if (years.length) {
+    const labels = [], data = [];
+    for (let y = +years[0]; y <= +years[years.length - 1]; y++) { labels.push(String(y)); data.push(yo[y] || 0); }
+    barChart('track', '#cTrack', labels, data, 'plays');
+  }
+}
+
+// ================= Phase 2 =================
+const grad = (k) => { const m = mood(k); return `linear-gradient(135deg,${m.color},${m.color2})`; };
+const hourVec = (hm) => { const v = new Array(24).fill(0); for (let i = 0; i < 168; i++) v[i % 24] += hm[i]; return v; };
+const hourLabel = (h) => String(h).padStart(2, '0') + ':00';
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+// ---------- Years tab ----------
+function yearCard(y) {
+  const a = D.years[y], top = a.topArtists[0], m = mood(a.dom);
+  return `<a class="ycard" href="#/year/${y}" style="--g:${grad(a.dom)};--ink:${ink(m.color, m.color2)}"><div class="yc-top"><b>${y}</b><span>${n0(a.hours)} h</span></div>
+    <div class="yc-art">${top ? avatar(top.n, 52) : ''}<div><small>Top artist</small><strong>${esc(top ? top.n : '–')}</strong></div></div>
+    <div class="yc-foot"><span>${esc(a.genres[0] ? a.genres[0][0] : '')}</span><span>${a.dom ? m.label : ''}</span></div></a>`;
+}
+function drawBump() {
+  killChart('bump'); if (!window.Chart) return;
+  const ranks = {}, cnt = {};
+  Y.forEach((y) => D.years[y].topArtists.slice(0, 10).forEach((a, i) => { (ranks[a.n] = ranks[a.n] || {})[y] = i + 1; cnt[a.n] = (cnt[a.n] || 0) + 1; }));
+  const names = Object.keys(cnt).filter((n) => cnt[n] >= 3).sort((a, b) => cnt[b] - cnt[a]).slice(0, 14);
+  const datasets = names.map((n, i) => { const c = `hsl(${Math.round((i * 360) / names.length)} 75% 62%)`; return { label: n, data: Y.map((y) => (ranks[n][y] != null ? ranks[n][y] : null)), borderColor: c, backgroundColor: c, tension: 0.25, pointRadius: 4, borderWidth: 2.5, spanGaps: false }; });
+  CH.bump = new Chart($('#cBump'), { type: 'line', data: { labels: Y, datasets }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'nearest', intersect: true },
+    scales: { y: { reverse: true, min: 1, max: 10, ticks: { stepSize: 1, callback: (v) => '#' + v } }, x: { grid: { display: false } } },
+    plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: #${c.parsed.y}` } } } } });
+}
+function drawNewShare() {
+  killChart('newshare'); if (!window.Chart) return;
+  const ys = Y.slice(1);
+  CH.newshare = new Chart($('#cNew'), { type: 'bar', data: { labels: ys, datasets: [
+    { label: 'Artists you had heard before', data: ys.map((y) => Math.round((1 - (D.years[y].newShare || 0)) * 100)), backgroundColor: '#ffffff30', borderRadius: 4 },
+    { label: 'New finds of that year', data: ys.map((y) => Math.round((D.years[y].newShare || 0) * 100)), backgroundColor: acc(), borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y}%` } } },
+      scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, max: 100, ticks: { callback: (v) => v + '%' } } } } });
+}
+function viewYears() {
+  const box = $('#v-years');
+  killChart('bump'); killChart('newshare');
+  box.innerHTML = `<h2 class="sec first">Years</h2><p class="secp">One page for every year. Open a year to see it as a story.</p>
+    <div class="yeargrid">${[...Y].reverse().map(yearCard).join('')}</div>
+    <section class="card pad"><h2>How your favourites moved</h2><p class="sub">Artists that reached your yearly top 10 in three or more years. Higher is better.</p><div class="chartbox tall2"><canvas id="cBump"></canvas></div></section>
+    <section class="card pad"><h2>Old favourites or new finds?</h2><p class="sub">Share of each year's listening that went to artists you had never played before that year.</p><div class="chartbox"><canvas id="cNew"></canvas></div></section>`;
+  drawBump(); drawNewShare();
+}
+
+// ---------- Wrapped (one year as a story) ----------
+function viewYear(y) {
+  const box = $('#v-year');
+  const a = D.years[y];
+  if (!a) { box.innerHTML = '<a class="back" href="#/years">‹ Years</a><h2 class="sec first">Year not found</h2>'; return; }
+  setAccent(a.dom);
+  const m = mood(a.dom), gg = grad(a.dom), ik = ink(m.color, m.color2);
+  const i = Y.indexOf(y), prevY = Y[i - 1], nextY = Y[i + 1];
+  const mos = M.filter((k) => k.startsWith(y));
+  const bm = mos.map((k) => [k, D.months[k].hours]).sort((p, q) => q[1] - p[1])[0];
+  let bd = null;
+  for (const k of mos) for (const [d, v] of Object.entries(D.months[k].days || {})) if (!bd || v > bd[1]) bd = [`${k}-${String(d).padStart(2, '0')}`, v];
+  const hv = hourVec(a.hm), tot = hv.reduce((p, q) => p + q, 0) || 1, ph = hv.indexOf(Math.max(...hv));
+  const wkend = a.hm.slice(120).reduce((p, q) => p + q, 0) / tot;
+  const sh = shares(a);
+  const wc = (inner) => `<div class="wcard" style="--g:${gg};--ink:${ik}">${inner}</div>`;
+  const top = a.topArtists[0];
+  const cards = [
+    wc(`<small>Your year in music</small><h2 class="wbig">${y}</h2><p class="wl">${n0(a.hours)} hours</p><p>${(a.hours / 24).toFixed(1)} days of music · ${n0(a.plays)} plays · ${n0(a.artists)} artists</p>`),
+    top ? wc(`<small>Your number one artist</small>${avatar(top.n, 132)}<p class="wl">${esc(top.n)}</p><p>${hrs(top.m)} · ${n0(top.p)} plays</p><p><a href="#/artist/${enc(top.n)}" style="color:inherit;font-weight:700">Open artist ›</a></p>`) : '',
+    wc(`<small>Top artists</small><div class="wlist">${a.topArtists.slice(0, 5).map((x, k) => `<div class="wr"><span>${k + 1}</span><span class="wn">${esc(x.n)}</span><em>${hrs(x.m)}</em></div>`).join('')}</div>`),
+    wc(`<small>Top tracks</small><div class="wlist">${a.topTracks.slice(0, 5).map((x, k) => `<div class="wr"><span>${k + 1}</span><span class="wn">${esc(x.n)}<br><em>${esc(x.a)}</em></span><em>${x.p}×</em></div>`).join('')}</div>`),
+    wc(`<small>Your sound</small><p class="wl">${esc(a.genres[0] ? a.genres[0][0] : '–')}</p><div class="wbars">${a.genres.slice(0, 5).map((g) => `<div class="wbar"><span>${esc(g[0])}</span><span class="tr"><i style="width:${Math.round((g[1] / a.genres[0][1]) * 100)}%"></i></span><span>${hrs(g[1])}</span></div>`).join('')}</div>`),
+    wc(`<small>Your mood</small><p class="wl">${a.dom ? m.label : '–'}</p><div class="wbars">${sh.slice(0, 5).map(([k, v]) => `<div class="wbar"><span>${mood(k).label}</span><span class="tr"><i style="width:${Math.round((v / sh[0][1]) * 100)}%"></i></span><span>${Math.round(v * 100)}%</span></div>`).join('')}</div>`),
+    wc(`<small>Discoveries</small><p class="wl">${n0(a.newArtists)} new artists</p>${a.newShare != null && i > 0 ? `<p>${Math.round(a.newShare * 100)}% of your listening was music you had never played before.</p>` : '<p>Your first year, so everything was new.</p>'}<div class="wlist">${(a.discover || []).slice(0, 3).map((x, k) => `<div class="wr"><span>${k + 1}</span><span class="wn">${esc(x.n)}</span><em>${hrs(x.m)}</em></div>`).join('')}</div>`),
+    wc(`<small>Your rhythm</small>${bm ? `<p class="wl">${MONTH_NAMES[+bm[0].slice(5) - 1]} was your biggest month</p><p>${hrs(bm[1] * 60)} of listening.</p>` : ''}${bd ? `<p>Biggest day: ${fmtD(bd[0])}, ${hrs(bd[1])}.</p>` : ''}<p>You were most active around ${hourLabel(ph)}, and ${Math.round(wkend * 100)}% of your listening was on weekends.</p>`),
+    a.skipRate != null ? wc(`<small>Skips</small><p class="wl">${Math.round(a.skipRate * 100)}%</p><p>of the tracks you started were skipped.</p>`) : '',
+  ].filter(Boolean);
+  box.innerHTML = `<a class="back" href="#/years">‹ Years</a>
+    <div class="ynav"><span>${prevY ? `<a href="#/year/${prevY}">‹ ${prevY}</a>` : ''}</span><strong>${y}</strong><span>${nextY ? `<a href="#/year/${nextY}">${nextY} ›</a>` : ''}</span></div>
+    <div class="wrapped">${cards.join('')}</div>
+    <button class="more" id="wshare">Share as image</button>`;
+  $('#wshare').onclick = () => shareYear(y);
+}
+async function shareYear(y) {
+  const a = D.years[y], m = mood(a.dom), W = 1080, H = 1350;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, W, H); gr.addColorStop(0, m.color); gr.addColorStop(1, m.color2);
+  g.fillStyle = gr; g.fillRect(0, 0, W, H); g.fillStyle = 'rgba(13,11,23,.38)'; g.fillRect(0, 0, W, H);
+  g.textBaseline = 'top';
+  const font = (w, sz) => `${w} ${sz}px 'Bricolage Grotesque', system-ui, sans-serif`;
+  const fit = (t, mw) => { let x = String(t); while (g.measureText(x).width > mw && x.length > 3) x = x.slice(0, -2); return x === String(t) ? x : x.trimEnd() + '…'; };
+  g.fillStyle = '#fff'; g.font = font(700, 46); g.fillText('My year in music', 80, 90);
+  g.font = font(800, 270); g.fillText(String(y), 70, 140);
+  g.font = font(700, 62); g.fillText(`${n0(a.hours)} hours · ${n0(a.plays)} plays`, 80, 460);
+  g.font = font(600, 38); g.fillStyle = 'rgba(255,255,255,.78)'; g.fillText('Top artists', 80, 580);
+  g.fillStyle = '#fff'; g.font = font(700, 54);
+  a.topArtists.slice(0, 5).forEach((x, k) => g.fillText(`${k + 1}   ${fit(x.n, 880)}`, 80, 640 + k * 76));
+  g.font = font(600, 38); g.fillStyle = 'rgba(255,255,255,.78)'; g.fillText('Top track', 80, 1050);
+  g.fillStyle = '#fff'; g.font = font(700, 50); g.fillText(fit(a.topTracks[0] ? a.topTracks[0].n : '–', 900), 80, 1105);
+  g.font = font(600, 42); g.fillStyle = 'rgba(255,255,255,.9)';
+  g.fillText(fit(`${a.genres[0] ? a.genres[0][0] : ''}${a.dom ? ' · ' + m.label + ' mood' : ''}`, 900), 80, 1185);
+  g.font = font(700, 34); g.fillStyle = 'rgba(255,255,255,.7)'; g.fillText('Listening Atlas', 80, 1260);
+  const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+  const file = new File([blob], `my-${y}-in-music.png`, { type: 'image/png' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: `My ${y} in music` }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const url = URL.createObjectURL(blob), l = document.createElement('a');
+  l.href = url; l.download = file.name; l.click(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+  toast('Image saved');
+}
+
+// ---------- Stats tab ----------
+const miniRows = (items) => items.length ? items.map((x) => `<${x.href ? 'a href="' + x.href + '"' : 'div'} class="mrow"><div class="nm">${x.pic || ''}<div><b>${esc(x.n)}</b>${x.s ? `<small>${esc(x.s)}</small>` : ''}</div></div><span class="v">${x.v}</span></${x.href ? 'a' : 'div'}>`).join('') : '<p class="note">Nothing to show yet.</p>';
+const artistLink = (n) => '#/artist/' + enc(n);
+function renderRecords() {
+  const r = D.records || {}, all = D.all, hvAll = hourVec(all.hm), peak = hvAll.indexOf(Math.max(...hvAll));
+  const ss = r.sessions || {};
+  const cards = [];
+  if (r.firstPlay) cards.push(kpi('First ever play', esc(r.firstPlay.n), `${esc(r.firstPlay.a)} · ${fmtD(r.firstPlay.date)}`));
+  cards.push(kpi('Total time', `${n0(all.hours)} h`, `${n0(all.hours / 24)} days of music`));
+  if (r.activeDays) cards.push(kpi('Days with music', n0(r.activeDays), `${Math.round((r.activeDays / r.daysSinceFirst) * 100)}% of days since your first play`));
+  if (r.streak && r.streak.len) cards.push(kpi('Longest streak', `${r.streak.len} days`, `${fmtD(r.streak.from)} – ${fmtD(r.streak.to)}`));
+  if (r.topDay) cards.push(kpi('Biggest day', hrs(r.topDay.min), fmtD(r.topDay.date)));
+  if (ss.longest) cards.push(kpi('Longest session', hrs(ss.longest.min), `${n0(ss.longest.n)} tracks · ${fmtD(ss.longest.date)}`));
+  if (ss.count) cards.push(kpi('Average session', `${Math.round(ss.avgMin)} min`, `${n0(ss.count)} sessions`));
+  cards.push(kpi('Peak hour', hourLabel(peak), 'Your busiest time of day'));
+  $('#srec').innerHTML = cards.join('');
+}
+function renderClock() {
+  const rows = [...Y].reverse();
+  let h = '<div></div>' + Array.from({ length: 24 }, (_, i) => `<div class="hl">${i % 6 === 0 ? i : ''}</div>`).join('');
+  for (const y of rows) {
+    const v = hourVec(D.years[y].hm), mx = Math.max(...v, 1);
+    h += `<div class="dl">${y}</div>` + v.map((x, i) => `<i style="--p:${x ? Math.round(10 + 90 * (x / mx)) : 0}%" title="${y} ${hourLabel(i)}: ${hrs(x)}"></i>`).join('');
+  }
+  $('#sclock').innerHTML = `<div class="heat">${h}</div>`;
+}
+function renderSeasons() {
+  const sum = new Array(12).fill(0), cnt = new Array(12).fill(0);
+  M.slice(0, -1).forEach((k) => { const mi = +k.slice(5) - 1; sum[mi] += D.months[k].hours; cnt[mi]++; });
+  barChart('season', '#cSeason', MONTH_NAMES.map((n) => n.slice(0, 3)), sum.map((v, i) => +(cnt[i] ? v / cnt[i] : 0).toFixed(1)), 'h');
+}
+function renderMoodHour() {
+  killChart('moodhour'); if (!window.Chart || !D.extra) return;
+  const mh = D.extra.moodHour, keys2 = Object.keys(mh).filter((k) => mh[k].some((x) => x > 0));
+  const tot = Array.from({ length: 24 }, (_, i) => keys2.reduce((s2, k) => s2 + mh[k][i], 0) || 1);
+  CH.moodhour = new Chart($('#cMoodHour'), { type: 'bar', data: { labels: Array.from({ length: 24 }, (_, i) => i), datasets: keys2.map((k) => ({ label: mood(k).label, data: mh[k].map((v, i) => +((100 * v) / tot[i]).toFixed(1)), backgroundColor: mood(k).color, borderWidth: 0 })) },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { title: (c) => hourLabel(c[0].label), label: (c) => `${c.dataset.label}: ${c.parsed.y}%` } } },
+      scales: { x: { stacked: true, grid: { display: false }, ticks: { maxTicksLimit: 8 } }, y: { stacked: true, max: 100, ticks: { callback: (v) => v + '%' } } } } });
+}
+function renderQuilt() {
+  const mx = Math.max(...M.map((k) => D.months[k].hours), 1);
+  let h = '<div></div>' + MONTH_NAMES.map((n) => `<div class="ql">${n[0]}</div>`).join('');
+  for (const y of [...Y].reverse()) {
+    h += `<div class="ql">${y}</div>`;
+    for (let mi = 1; mi <= 12; mi++) {
+      const k = `${y}-${String(mi).padStart(2, '0')}`, a = D.months[k];
+      h += a ? `<a href="#/" data-ym="${k}" style="background:${grad(a.dom)};opacity:${(0.3 + 0.7 * Math.min(1, a.hours / mx)).toFixed(2)}" title="${fmtM(k)}: ${hrs(a.hours * 60)}, ${a.dom ? mood(a.dom).label : 'no mood data'}"></a>` : '<i></i>';
+    }
+  }
+  $('#squilt').innerHTML = `<div class="quilt">${h}</div>`;
+  $$('#squilt a').forEach((el2) => (el2.onclick = () => { S.mode = 'month'; S.key = el2.dataset.ym; S.theme = null; }));
+  $('#squiltLegend').innerHTML = Object.keys(D.meta.moods).map((k) => `<span style="background:${grad(k)};color:${ink(mood(k).color, mood(k).color2)}">${mood(k).label}</span>`).join('');
+}
+function renderSkipHour() {
+  const sk = D.extra && D.extra.skipHour;
+  if (!sk || sk.every((x) => x == null)) { $('#cSkipHour').parentElement.innerHTML = '<p class="note">Not enough skip data yet.</p>'; return; }
+  barChart('skiphour', '#cSkipHour', sk.map((_, i) => i), sk.map((x) => (x == null ? 0 : Math.round(x * 100))), '%');
+}
+async function renderSkips() {
+  const box = $('#sskips');
+  try {
+    const [det, tix] = await Promise.all([getData('artist-details'), getData('track-index')]);
+    const arts = Object.entries(det).filter(([, d]) => d.sk != null && d.p >= 40);
+    const most = [...arts].sort((a, b) => b[1].sk - a[1].sk).slice(0, 6).map(([n, d]) => ({ n, s: `${n0(d.p)} plays`, v: Math.round(d.sk * 100) + '%', href: artistLink(n) }));
+    const rare = arts.filter(([, d]) => d.p >= 150).sort((a, b) => a[1].sk - b[1].sk || b[1].p - a[1].p).slice(0, 6).map(([n, d]) => ({ n, s: `${n0(d.p)} plays`, v: Math.round(d.sk * 100) + '%', href: artistLink(n) }));
+    const tr = tix.filter((r) => r[8] != null);
+    const mostT = [...tr].sort((a, b) => b[8] - a[8] || b[3] - a[3]).slice(0, 6).map((r) => ({ n: r[0], s: r[1], v: Math.round(r[8] * 100) + '%', href: '#/track/' + enc(r[0]) + '/' + enc(r[1]) }));
+    box.innerHTML = `<div class="mh">Artists you skip most</div>${miniRows(most)}<div class="mh">Artists you rarely skip</div>${miniRows(rare)}<div class="mh">Tracks you skip most</div>${miniRows(mostT)}`;
+  } catch (e) { box.innerHTML = '<p class="note">Could not load skip data.</p>'; }
+}
+const activeYears = (ys, min = 30) => Object.entries(parseYrs(ys)).filter(([, v]) => v >= min).map(([y]) => +y).sort((a, b) => a - b);
+async function renderLongTerm() {
+  try {
+    const ax = prepArtists(await getData('artist-index'));
+    const lt = ax.list.map((x) => ({ x, ys: activeYears(x.ys) })).filter((o) => o.ys.length >= 5).sort((a, b) => b.ys.length - a.ys.length || b.x.m - a.x.m).slice(0, 10);
+    $('#slong').innerHTML = miniRows(lt.map((o) => ({ n: o.x.n, s: `${o.ys[0]}–${o.ys[o.ys.length - 1]} · ${hrs(o.x.m)}`, v: `${o.ys.length} years`, pic: avatar(o.x.n, 36), href: artistLink(o.x.n) })));
+    const cb = [];
+    for (const x of ax.list) {
+      if (x.m < 120) continue;
+      const ys = activeYears(x.ys); let best = null;
+      for (let i = 1; i < ys.length; i++) { const gap = ys[i] - ys[i - 1] - 1; if (gap >= 3 && (!best || gap > best.gap)) best = { gap, from: ys[i - 1], to: ys[i] }; }
+      if (best) cb.push({ x, ...best });
+    }
+    cb.sort((a, b) => b.gap - a.gap || b.x.m - a.x.m);
+    $('#scome').innerHTML = miniRows(cb.slice(0, 10).map((o) => ({ n: o.x.n, s: `${o.from} → ${o.to}`, v: `${o.gap} years away`, pic: avatar(o.x.n, 36), href: artistLink(o.x.n) })));
+  } catch (e) { $('#slong').innerHTML = $('#scome').innerHTML = '<p class="note">Could not load artist data.</p>'; }
+}
+async function renderWonders() {
+  try {
+    const det = await getData('artist-details');
+    const w = Object.entries(det).filter(([, d]) => d.m >= 120 && Object.keys(d.mo).length)
+      .map(([n, d]) => { const [k, v] = Object.entries(d.mo).sort((x, y) => y[1] - x[1])[0]; return { n, d, k, share: v / d.m }; })
+      .filter((o) => o.share >= 0.4).sort((x, y) => y.share - x.share || y.d.m - x.d.m).slice(0, 10);
+    $('#swonder').innerHTML = miniRows(w.map((o) => ({ n: o.n, s: `${fmtM(o.k)} · ${hrs(o.d.m)} in total`, v: `${Math.round(o.share * 100)}% in one month`, pic: avatar(o.n, 36), href: artistLink(o.n) })));
+  } catch (e) { $('#swonder').innerHTML = '<p class="note">Could not load artist data.</p>'; }
+}
+async function renderOnThisDay(md) {
+  const box = $('#sotd');
+  try {
+    const o = await getData('on-this-day');
+    const rows2 = o[md] || [];
+    box.innerHTML = rows2.length ? miniRows(rows2.map((r) => ({ n: r[1], s: `${r[2]}${r[3] && r[3] !== r[1] ? ' · ' + r[3] : ''}`, v: `${r[0]} · ${hrs(r[4])}`, pic: avatar(r[1], 36), href: artistLink(r[1]) }))) : '<p class="note">No listening on this date in any year.</p>';
+  } catch (e) { box.innerHTML = '<p class="note">Could not load this view.</p>'; }
+}
+const CMP = { mode: 'year', a: null, b: null };
+function renderCompare() {
+  const set = CMP.mode === 'year' ? D.years : D.months, ks = Object.keys(set).sort();
+  if (!CMP.a || !set[CMP.a]) { CMP.a = ks[ks.length - 1]; CMP.b = ks[ks.length - 2] || ks[0]; }
+  if (!set[CMP.b]) CMP.b = ks[0];
+  const lab = (k) => (CMP.mode === 'year' ? k : fmtM(k));
+  const opts = (sel) => [...ks].reverse().map((k) => `<option value="${k}"${k === sel ? ' selected' : ''}>${lab(k)}</option>`).join('');
+  const A = set[CMP.a], B = set[CMP.b];
+  const rows3 = [['Hours', A.hours, B.hours, (v) => n0(v)], ['Plays', A.plays, B.plays, n0], ['Artists', A.artists, B.artists, n0], ['New artists', A.newArtists, B.newArtists, n0], ['Variety (effective artists)', A.eff, B.eff, n0]]
+    .map(([l, a, b, f]) => { const d = b ? Math.round(((a - b) / b) * 100) : null; return `<tr><td>${l}</td><td>${f(a)}</td><td>${f(b)}</td><td class="${d > 0 ? 'up' : d < 0 ? 'dn' : ''}">${d == null ? '–' : (d > 0 ? '+' : '') + d + '%'}</td></tr>`; }).join('');
+  const txt = (l, a, b) => `<tr><td>${l}</td><td>${a}</td><td>${b}</td><td></td></tr>`;
+  const side = (X) => `<div><div class="mh">Top artists</div>${miniRows(X.topArtists.slice(0, 5).map((x) => ({ n: x.n, v: hrs(x.m), pic: avatar(x.n, 32), href: artistLink(x.n) })))}<div class="mh">Mood mix</div><div class="sbar">${shares(X).map(([k, v]) => `<i style="width:${v * 100}%;background:${grad(k)}" title="${mood(k).label} ${Math.round(v * 100)}%"></i>`).join('')}</div></div>`;
+  $('#scmp').innerHTML = `${chipBar('cmode', [['year', 'Years'], ['month', 'Months']], CMP.mode)}
+    <div class="toolbar"><select id="cA" aria-label="First period">${opts(CMP.a)}</select><select id="cB" aria-label="Second period">${opts(CMP.b)}</select></div>
+    <table class="cmp"><tr><th></th><th>${lab(CMP.a)}</th><th>${lab(CMP.b)}</th><th>Change</th></tr>${rows3}
+      ${txt('Top genre', esc(A.genres[0] ? A.genres[0][0] : '–'), esc(B.genres[0] ? B.genres[0][0] : '–'))}${txt('Dominant mood', A.dom ? mood(A.dom).label : '–', B.dom ? mood(B.dom).label : '–')}</table>
+    <div class="cmpcols">${side(A)}${side(B)}</div>`;
+  wireChips('cmode', (k) => { CMP.mode = k; CMP.a = CMP.b = null; renderCompare(); });
+  $('#cA').onchange = (e) => { CMP.a = e.target.value; renderCompare(); };
+  $('#cB').onchange = (e) => { CMP.b = e.target.value; renderCompare(); };
+}
+async function viewStats() {
+  const box = $('#v-stats');
+  ['season', 'moodhour', 'skiphour', 'dec', 'avg', 'start', 'shuffle', 'devices'].forEach(killChart);
+  box.innerHTML = `<h2 class="sec first">Stats</h2><p class="secp">Records, rhythms and habits across your whole history.</p>
+    <div class="jump" id="sjump"></div>
+    <section class="grid g4" id="srec"></section>
+    <section class="card pad"><h2>How your day changed</h2><p class="sub">When you listened, year by year. Brighter means more of that year's listening.</p><div id="sclock"></div></section>
+    <section class="grid g12 pad">
+      <div class="card"><h2>Seasons</h2><p class="sub">Average hours per calendar month.</p><div class="chartbox" style="height:250px"><canvas id="cSeason"></canvas></div></div>
+      <div class="card"><h2>Mood by hour of day</h2><p class="sub">What you listen to at different times.</p><div class="chartbox" style="height:250px"><canvas id="cMoodHour"></canvas></div></div>
+    </section>
+    <section class="card pad"><h2>Mood quilt</h2><p class="sub">The dominant mood of every month. Tap a month to open it.</p><div id="squilt"></div><div class="chips" id="squiltLegend" style="margin-top:12px"></div></section>
+    <section class="grid g12 pad">
+      <div class="card"><h2>Skips by hour</h2><p class="sub">Share of tracks you skipped, by hour of day (from 2017).</p><div class="chartbox" style="height:250px"><canvas id="cSkipHour"></canvas></div></div>
+      <div class="card"><h2>Skipping habits</h2><div id="sskips"><p class="note">Loading…</p></div></div>
+    </section>
+    <section class="grid g12 pad">
+      <div class="card"><h2>Long-term favourites</h2><p class="sub">Artists you kept coming back to, year after year.</p><div id="slong"><p class="note">Loading…</p></div></div>
+      <div class="card"><h2>Comebacks</h2><p class="sub">Artists you left for three years or more and then returned to.</p><div id="scome"><p class="note">Loading…</p></div></div>
+    </section>
+    <section class="card pad"><h2>Binge listens</h2><p class="sub">Artists where most of your listening happened in a single month.</p><div id="swonder"><p class="note">Loading…</p></div></section>
+    <section class="card pad" id="sec-decades"><h2>Music by decade</h2><p class="sub" id="sdecSub">When the music you play was originally released.</p><div id="sdec"><p class="note">Loading…</p></div></section>
+    <section class="card pad" id="sec-world"><div class="cardhead"><h2>Where your music comes from</h2><div id="geoYearBox"></div></div><p class="sub" id="sgeoSub">The home country of the artists you listen to.</p><div id="sworld"><p class="note">Loading…</p></div></section>
+    <section class="card pad" id="sec-habits"><h2>How you choose your music</h2><p class="sub" id="shabSub">How tracks start, whether shuffle is on, and where you listen.</p><div id="shabits"><p class="note">Loading…</p></div></section>
+    <section class="card pad"><div class="cardhead"><h2>On this day</h2><div class="toolbar" style="margin:0"><input type="date" id="sotdDate" aria-label="Date"></div></div><div id="sotd"><p class="note">Loading…</p></div></section>
+    <section class="card pad"><h2>Compare two periods</h2><div id="scmp"></div></section>`;
+  renderRecords(); renderClock(); renderSeasons(); renderMoodHour(); renderQuilt(); renderSkipHour(); renderCompare();
+  const now = new Date(), d0 = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  $('#sotdDate').value = d0;
+  $('#sotdDate').onchange = (e) => { if (e.target.value) renderOnThisDay(e.target.value.slice(5)); };
+  renderOnThisDay(d0.slice(5));
+  renderSkips(); renderLongTerm(); renderWonders();
+  renderJump(); renderDecades(); renderWorld(); renderHabits();
+}
+
+// ================= Phase 3 =================
+function renderJump() {
+  const items = [['#srec', 'Records'], ['#sclock', 'Rhythm'], ['#sskips', 'Skips'], ['#slong', 'Favourites'], ['#sec-decades', 'Decades'], ['#sec-world', 'World'], ['#sec-habits', 'Habits'], ['#sotd', 'On this day'], ['#scmp', 'Compare']];
+  const box = $('#sjump'); box.innerHTML = '';
+  for (const [sel, label] of items) {
+    const b = el('button', '', label);
+    b.onclick = () => { const t = $(sel); const sec = t.closest('section') || t; sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    box.append(b);
+  }
+}
+const decColor = (d) => `hsl(${Math.round(((d - 1920) / 110) * 300)} 70% 58%)`;
+const pending = (what, p) => `<p class="note">${what} are still being fetched in the background${p != null ? ` (${Math.round(p * 100)}% so far)` : ''}. They fill in as the progress indicator at the top advances. You can keep this tab open and look around meanwhile.</p>`;
+
+function renderDecades() {
+  const box = $('#sdec'), dd = D.decades;
+  killChart('dec'); killChart('avg');
+  if (!dd || dd.coverage < 0.05) { box.innerHTML = pending('Release years', dd && dd.coverage); return; }
+  $('#sdecSub').textContent = `When the music you play was originally released. Based on the ${Math.round(dd.coverage * 100)}% of your listening where the release year is known.`;
+  const years = Object.keys(dd.byYear).filter((y) => (dd.coverageByYear[y] || 0) >= 0.15);
+  const decs = [...new Set(years.flatMap((y) => Object.keys(dd.byYear[y]).map(Number)))].sort((a, b) => a - b);
+  box.innerHTML = `<div class="chartbox" style="height:300px"><canvas id="cDec"></canvas></div>
+    <div class="mh">How old is the music you play?</div><div class="chartbox" style="height:210px"><canvas id="cAvg"></canvas></div><p class="note" id="sdecNote"></p>
+    <div class="mh">Most played albums by decade</div><div id="sdecChips"></div><div id="sdecTop"></div>`;
+  if (window.Chart) {
+    CH.dec = new Chart($('#cDec'), { type: 'bar', data: { labels: years, datasets: decs.map((d) => ({ label: d + 's', backgroundColor: decColor(d), borderWidth: 0,
+      data: years.map((y) => { const o = dd.byYear[y], t = Object.values(o).reduce((a, v) => a + v, 0) || 1; return +(((o[d] || 0) * 100) / t).toFixed(1); }) })) },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y}%` } } },
+        scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, max: 100, ticks: { callback: (v) => v + '%' } } } } });
+    const ay = Object.keys(dd.avgYear);
+    CH.avg = new Chart($('#cAvg'), { type: 'line', data: { labels: ay, datasets: [
+      { label: 'Average release year', data: ay.map((y) => dd.avgYear[y]), borderColor: acc(), backgroundColor: acc(), tension: 0.3, pointRadius: 3, borderWidth: 2.5 },
+      { label: 'Calendar year', data: ay.map((y) => +y), borderColor: '#ffffff55', borderDash: [5, 5], pointRadius: 0, borderWidth: 1.5 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${Math.round(c.parsed.y)}` } } }, scales: { x: { grid: { display: false } }, y: { ticks: { callback: (v) => String(v) } } } } });
+    const last = ay[ay.length - 1];
+    $('#sdecNote').textContent = `In ${last} the music you played was on average ${Math.round(+last - dd.avgYear[last])} years old.`;
+  }
+  const tops = Object.keys(dd.top).map(Number).sort((a, b) => a - b);
+  const def = tops.reduce((b, d) => ((dd.all[d] || 0) > (dd.all[b] || 0) ? d : b), tops[0]);
+  const drawTop = (d) => {
+    $('#sdecTop').innerHTML = miniRows((dd.top[d] || []).map((o) => ({ n: o.n, s: `${o.a} · ${o.y}`, v: hrs(o.m), pic: cover(o.n, o.a, 40), href: artistLink(o.a) })));
+  };
+  $('#sdecChips').innerHTML = chipBar('sdecbar', tops.map((d) => [String(d), d + 's']), String(def));
+  wireChips('sdecbar', (k) => drawTop(+k));
+  drawTop(def);
+}
+
+// ---------- world map ----------
+let WORLD = null;
+const HOME = (() => { try { return new Intl.Locale(navigator.language).region || null; } catch (e) { return null; } })();
+const flag = (c) => c.replace(/./g, (ch) => String.fromCodePoint(127397 + ch.charCodeAt(0)));
+let REGIONS = null;
+const cname = (c) => { try { REGIONS = REGIONS || new Intl.DisplayNames(['en'], { type: 'region' }); return REGIONS.of(c) || c; } catch (e) { return c; } };
+async function renderWorld() {
+  const box = $('#sworld'), g = D.geo;
+  if (!g || g.coverage < 0.05) { box.innerHTML = pending('Artist origins', g && g.coverage); return; }
+  try { if (!WORLD) { const r = await fetch('assets/world.json'); if (!r.ok) throw new Error(r.status); WORLD = await r.json(); } }
+  catch (e) { box.innerHTML = '<p class="note">Could not load the map.</p>'; return; }
+  const years = Object.keys(g.byYear).sort();
+  $('#sgeoSub').textContent = `The home country of the artists you listen to. Based on the ${Math.round(g.coverage * 100)}% of your listening where the country is known.`;
+  $('#geoYearBox').innerHTML = `<select id="geoYear" aria-label="Year"><option value="">All time</option>${[...years].reverse().map((y) => `<option>${y}</option>`).join('')}</select>`;
+  box.innerHTML = '<div class="statrow" id="geoStats"></div><div id="geoSvg"></div><div class="geoinfo" id="geoInfo"></div><div class="mh">Top countries</div><div id="geoList"></div>';
+  let selC = null;
+  const draw = () => {
+    const yr = $('#geoYear').value, data = yr ? g.byYear[yr] || {} : g.all;
+    const tot = Object.values(data).reduce((a, v) => a + v, 0) || 1, mx = Math.max(...Object.values(data), 1);
+    const sorted = Object.entries(data).sort((a, b) => b[1] - a[1]);
+    const home = HOME && data[HOME] ? HOME : sorted[0] ? sorted[0][0] : null, hv = home ? data[home] || 0 : 0;
+    $('#geoStats').innerHTML = home ? `<span>${Math.round((hv / tot) * 100)}% ${cname(home)}</span><span>${Math.round(100 - (hv / tot) * 100)}% other countries</span><span>${sorted.length} countries</span>` : '';
+    $('#geoSvg').innerHTML = `<svg class="map" viewBox="0 0 ${WORLD.w} ${WORLD.h}" role="img" aria-label="World map of where your artists come from">${Object.entries(WORLD.c).map(([c, d]) => {
+      const v = data[c] || 0; const p = v ? Math.round(18 + 82 * Math.sqrt(v / mx)) : 0;
+      return `<path d="${d}" data-c="${c}" style="--p:${p}%"><title>${cname(c)}${v ? ': ' + hrs(v) : ''}</title></path>`; }).join('')}</svg>`;
+    const info = (c) => {
+      selC = c; $$('#geoSvg path').forEach((x) => x.classList.toggle('sel', x.dataset.c === c));
+      const v = data[c] || 0, tops = (g.top[c] || []);
+      $('#geoInfo').innerHTML = v ? `<h3>${flag(c)} ${cname(c)}</h3><p>${hrs(v)} · ${Math.round((v / tot) * 100)}% of your listening${yr ? ' in ' + yr : ''}</p>${yr ? '' : miniRows(tops.map((t) => ({ n: t.n, v: hrs(t.m), pic: avatar(t.n, 36), href: artistLink(t.n) })))}`
+        : `<h3>${flag(c)} ${cname(c)}</h3><p>No listening from here${yr ? ' in ' + yr : ''}.</p>`;
+    };
+    $$('#geoSvg path').forEach((x) => (x.onclick = () => info(x.dataset.c)));
+    if (sorted[0]) info(selC && (data[selC] || WORLD.c[selC]) ? selC : sorted[0][0]);
+    const lm = Math.max(...sorted.slice(0, 10).map((e) => e[1]), 1);
+    $('#geoList').innerHTML = sorted.slice(0, 10).map(([c, v], i) => `<div class="row" style="cursor:pointer" data-c="${c}"><span class="rk">${i + 1}</span><div class="nm"><b>${flag(c)} ${cname(c)}</b></div><span class="val">${hrs(v)} · ${Math.round((v / tot) * 100)}%</span><div class="bar"><i style="width:${Math.max(3, Math.round((v / lm) * 100))}%"></i></div></div>`).join('');
+    $$('#geoList .row').forEach((x) => (x.onclick = () => info(x.dataset.c)));
+  };
+  $('#geoYear').onchange = draw;
+  draw();
+}
+
+// ---------- how you choose your music ----------
+const START_GROUPS = [['You picked it', 'cp', '#38bdf8'], ['Played next', 't', '#a78bfa'], ['Skipped into it', 'fb', '#fb7185'], ['Other', 'areo', '#64748b']];
+const DEVICES = [['i', 'iPhone / iPad', '#38bdf8'], ['a', 'Android', '#a3e635'], ['w', 'Windows', '#facc15'], ['m', 'Mac', '#f0abfc'], ['b', 'Web player', '#2dd4bf'], ['t', 'TV and speakers', '#fb923c'], ['l', 'Linux', '#94a3b8'], ['o', 'Other', '#64748b']];
+function renderHabits() {
+  const box = $('#shabits'), hw = D.how;
+  killChart('start'); killChart('shuffle'); killChart('devices');
+  if (!hw) { box.innerHTML = pending('Listening habits'); return; }
+  const ys = Object.keys(hw.years).filter((y) => hw.years[y].sh[1] >= 300);
+  const all = hw.all, sTot = Object.values(all.s).reduce((a, v) => a + v, 0) || 1;
+  const grp = (s, keys) => [...keys].reduce((a, k) => a + (s[k] || 0), 0);
+  const devTot = Object.values(all.dev).reduce((a, v) => a + v, 0) || 1;
+  const topDev = DEVICES.map(([k, l]) => [l, all.dev[k] || 0]).sort((a, b) => b[1] - a[1])[0];
+  box.innerHTML = `<div class="statrow"><span>${Math.round((grp(all.s, 'cp') / sTot) * 100)}% of tracks picked by you</span><span>${Math.round((grp(all.s, 't') / sTot) * 100)}% played next</span><span>${Math.round((all.sh[0] / all.sh[1]) * 100)}% on shuffle</span><span>Most time on ${topDev[0]} (${Math.round((topDev[1] / devTot) * 100)}%)</span></div>
+    <div class="grid g12"><div><div class="mh">How tracks start</div><div class="chartbox" style="height:260px"><canvas id="cStart"></canvas></div></div>
+    <div><div class="mh">Shuffle</div><div class="chartbox" style="height:260px"><canvas id="cShuffle"></canvas></div></div></div>
+    <div class="mh">Where you listen</div><div class="chartbox" style="height:280px"><canvas id="cDevices"></canvas></div>
+    <p class="note">Devices are grouped by type. Tracks that started automatically after the previous one count as "played next".</p>`;
+  if (!window.Chart) return;
+  const stackOpts = (fmt) => ({ responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y}%` } } },
+    scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, max: 100, ticks: { callback: (v) => v + '%' } } } });
+  CH.start = new Chart($('#cStart'), { type: 'bar', data: { labels: ys, datasets: START_GROUPS.map(([l, keys, c]) => ({ label: l, backgroundColor: c, borderWidth: 0,
+    data: ys.map((y) => { const s = hw.years[y].s, t = Object.values(s).reduce((a, v) => a + v, 0) || 1; return +((grp(s, keys) * 100) / t).toFixed(1); }) })) }, options: stackOpts() });
+  CH.shuffle = new Chart($('#cShuffle'), { type: 'line', data: { labels: ys, datasets: [{ label: 'Shuffle on', data: ys.map((y) => Math.round((hw.years[y].sh[0] * 100) / hw.years[y].sh[1])), borderColor: acc(), backgroundColor: acc(), tension: 0.3, pointRadius: 3, borderWidth: 2.5 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${c.parsed.y}% of tracks` } } }, scales: { x: { grid: { display: false } }, y: { min: 0, max: 100, ticks: { callback: (v) => v + '%' } } } } });
+  CH.devices = new Chart($('#cDevices'), { type: 'bar', data: { labels: ys, datasets: DEVICES.filter(([k]) => ys.some((y) => (hw.years[y].dev[k] || 0) > 0)).map(([k, l, c]) => ({ label: l, backgroundColor: c, borderWidth: 0,
+    data: ys.map((y) => { const d = hw.years[y].dev, t = Object.values(d).reduce((a, v) => a + v, 0) || 1; return +(((d[k] || 0) * 100) / t).toFixed(1); }) })) }, options: stackOpts() });
+}
+
+// ---------- routing ----------
+let R = { view: 'overview' };
+function parseRoute() {
+  try {
+    const raw = location.hash.replace(/^#\/?/, '');
+    const [v, a, b] = raw ? raw.split('/').map(decodeURIComponent) : [];
+    if (v === 'artists') return { view: 'artists' };
+    if (v === 'artist' && a) return { view: 'artist', a };
+    if (v === 'tracks') return { view: 'tracks' };
+    if (v === 'track' && a) return { view: 'track', a, b: b || '' };
+    if (v === 'years') return { view: 'years' };
+    if (v === 'year' && a) return { view: 'year', a };
+    if (v === 'stats') return { view: 'stats' };
+  } catch (e) { /* fall through */ }
+  return { view: 'overview' };
+}
+async function route(opts = {}) {
+  R = parseRoute();
+  document.body.dataset.view = R.view;
+  const tab = R.view === 'artist' ? 'artists' : R.view === 'track' ? 'tracks' : R.view === 'year' ? 'years' : R.view;
+  $$('#tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === tab));
+  for (const v of ['overview', 'artists', 'artist', 'tracks', 'track', 'years', 'year', 'stats']) $('#v-' + v).hidden = v !== R.view;
+  $('#ctrl').hidden = R.view !== 'overview';
+  if (!opts.keepScroll) window.scrollTo(0, 0);
+  try {
+    if (R.view === 'overview') {
+      renderOverview();
+      if (window.Chart) $$('canvas').forEach((c) => { const ch = Chart.getChart(c); if (ch) ch.resize(); });
+    } else {
+      theme();
+      if (R.view === 'artists') await viewArtists();
+      else if (R.view === 'artist') await viewArtist(R.a);
+      else if (R.view === 'tracks') await viewTracks();
+      else if (R.view === 'track') await viewTrack(R.a, R.b);
+      else if (R.view === 'years') viewYears();
+      else if (R.view === 'year') viewYear(R.a);
+      else if (R.view === 'stats') await viewStats();
+    }
+  } catch (e) {
+    const box = $('#v-' + R.view);
+    box.innerHTML = `<h2 class="sec first">Could not load this view</h2><p class="secp">${esc(e.message)}. Try the update button, or wait a minute if the data was just refreshed.</p>`;
+  }
+}
+window.addEventListener('hashchange', () => route());
+
+// ---------- data + update ----------
+function applyData(nd, keep) {
+  D = nd; M = Object.keys(D.months).sort(); Y = Object.keys(D.years).sort();
+  if (!keep) S = { mode: 'month', key: M[M.length - 1], theme: null };
+  else if (S.mode !== 'all' && !keys().includes(S.key)) S.key = keys()[keys().length - 1];
+  $('#demo').hidden = !D.meta.demo;
+  $('#foot').textContent = `Listening Atlas v${APP_VERSION}. Analysed ` + new Date(D.generated).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) + `. Times are in ${D.meta.tz || 'your local time zone'}. Display: ` + diag().text + '.';
+}
+function diag() {
+  const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+  const p = document.createElement('div');
+  p.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top,0px);visibility:hidden';
+  document.body.append(p); const inset = p.offsetHeight; p.remove();
+  const gap = standalone ? Math.max(0, Math.max(screen.height, screen.width) - Math.max(innerHeight, innerWidth)) : 0;
+  const note = standalone && inset === 0 && gap > 20 ? `, iOS draws a ${gap} px bar above the page` : '';
+  return { standalone, inset, text: `${standalone ? 'Home Screen app' : 'Browser'}, top inset ${inset} px${note}` };
+}
+let toastTimer;
+function toast(msg, ms = 3000) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), ms);
+}
+async function checkUpdate() {
+  try {
+    const page = await fetch('index.html?nocache=' + Date.now(), { cache: 'no-store' });
+    const m = (await page.text()).match(/APP_VERSION\s*=\s*'([\d.]+)'/);
+    const latest = m ? m[1] : APP_VERSION;
+    if (latest === APP_VERSION) { toast(`You have the latest version (v${APP_VERSION})`); return; }
+    toast(`New version v${latest} found. Reloading…`);
+    if ('caches' in window) for (const k of await caches.keys()) await caches.delete(k);
+    if (navigator.serviceWorker) for (const g of await navigator.serviceWorker.getRegistrations()) await g.unregister();
+    setTimeout(() => location.replace(location.pathname + '?t=' + Date.now()), 800);
+  } catch (e) { toast('Could not check for updates.'); }
+}
+
+// ================= Listening Atlas: import, storage, enrichment =================
+const TZ_LOCAL = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+const QP = new URLSearchParams(location.search);
+let WORKER = null, ENR = null, BOUND = false;
+
+function runWorker(msg, onProgress) {
+  return new Promise((resolve, reject) => {
+    const w = new Worker('worker.js', { type: 'module' });
+    WORKER = w;
+    w.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === 'progress') { if (onProgress) onProgress(m); }
+      else if (m.type === 'done') { w.terminate(); resolve(m); }
+      else if (m.type === 'error') { w.terminate(); reject(new Error(m.message)); }
+    };
+    w.onerror = (e) => { w.terminate(); reject(new Error(e.message || 'The import worker could not start in this browser.')); };
+    w.postMessage(msg);
+  });
+}
+function showLanding() { $('#app').hidden = true; $('#landing').hidden = false; $('#verL').textContent = 'v' + APP_VERSION; window.scrollTo(0, 0); }
+function setImporting(on) {
+  $('#dzIdle').hidden = on; $('#prog').hidden = !on;
+  if (on) { $('#importErr').hidden = true; $('#backRow').hidden = true; }
+}
+function setProg(p) {
+  $('#progText').textContent = p.phase + (p.indeterminate ? '…' : p.ratio < 1 ? ` (${Math.round(p.ratio * 100)}%)` : '');
+  $('#pbar').classList.toggle('ind', !!p.indeterminate);
+  $('#pbarFill').style.width = p.indeterminate ? '' : Math.round(p.ratio * 100) + '%';
+}
+function showImportError(msg, canGoBack) {
+  setImporting(false);
+  const e = $('#importErr'); e.textContent = msg; e.hidden = false;
+  $('#backRow').hidden = !canGoBack;
+}
+async function importFiles(fileList) {
+  const files = [...fileList];
+  if (!files.length) return;
+  const hadData = !$('#app').hidden || !!D;
+  if (ENR) ENR.stop();
+  showLanding(); setImporting(true); setProg({ phase: 'Reading your export', ratio: 0 });
+  try {
+    const res = await runWorker({ type: 'import', files, tz: TZ_LOCAL }, setProg);
+    await startApp('local');
+    toast(`Imported ${n0(res.info.rows)} plays${res.info.incognito ? ` (${n0(res.info.incognito)} private-session plays left out)` : ''}`, 6000);
+  } catch (e) { showImportError(e.message, hadData); }
+}
+async function startApp(mode) {
+  MODE = mode;
+  for (const k of Object.keys(CACHE)) delete CACHE[k];
+  AX = null; TX = null; IM = { a: {}, l: {} };
+  const nd = await getData('summary');
+  if (!nd || !nd.months || !Object.keys(nd.months).length) throw new Error('There is no listening data to show.');
+  applyData(nd, false);
+  $('#landing').hidden = true; $('#app').hidden = false; setImporting(false);
+  if (!BOUND) {
+    BOUND = true;
+    $('#sel').onchange = (e) => { S.key = e.target.value; render(); };
+    $('#older').onclick = () => step(-1); $('#newer').onclick = () => step(1);
+  }
+  route(); buildCharts(); loadImages();
+  if (MODE === 'local') startEnrichment();
+}
+async function reloadData() {
+  for (const k of Object.keys(CACHE)) delete CACHE[k];
+  AX = null; TX = null;
+  const nd = await getData('summary');
+  applyData(nd, true);
+  await loadImages(true);
+  route({ keepScroll: true }); buildCharts();
+  toast('New insights are ready');
+}
+async function reanalyse(silent) {
+  try {
+    if (!silent) toast('Re-analysing…');
+    await runWorker({ type: 'reanalyze', tz: TZ_LOCAL });
+    await reloadData();
+  } catch (e) { toast('Could not re-analyse: ' + e.message, 6000); }
+}
+
+// ---------- enrichment (genres, photos, covers, years, countries) ----------
+function updateChip(p) {
+  const b = $('#enrich'); b.hidden = !p.running;
+  if (p.running) $('#enrichText').textContent = `${p.label} ${p.total ? Math.round((p.done / p.total) * 100) : 0}%`;
+  else if (p.finished) toast('Genres, covers and details are up to date');
+}
+async function startEnrichment(more) {
+  if (QP.has('noenrich')) return;
+  const { createEnricher } = await import('./enrich.js');
+  if (!ENR) ENR = createEnricher({ scale: +(QP.get('enrichscale') || 1), onProgress: updateChip, onMilestone: async () => { await runWorker({ type: 'reanalyze', tz: TZ_LOCAL }); await reloadData(); } });
+  if (more) ENR.more(); else ENR.run();
+}
+
+// ---------- menu ----------
+function buildMenu() {
+  const m = $('#menu'), busy = ENR && ENR.running;
+  m.innerHTML = MODE === 'demo'
+    ? '<div class="mi">Demo data</div><button data-a="own">Import your own data</button><button data-a="about">About and privacy</button>'
+    : `<div class="mi">Your data is stored on this device</div><button data-a="import">Import another export…</button><button data-a="${busy ? 'pause' : 'more'}">${busy ? 'Pause fetching details' : 'Fetch more details'}</button><button data-a="reanalyse">Re-analyse now</button><button data-a="about">About and privacy</button><button data-a="update">Check for app update</button><button data-a="delete">Delete my data</button>`;
+  m.querySelectorAll('button').forEach((b) => (b.onclick = () => { m.hidden = true; menuAction(b.dataset.a); }));
+}
+async function menuAction(a) {
+  if (a === 'own') location.href = location.pathname;
+  else if (a === 'import') $('#file').click();
+  else if (a === 'pause') { ENR.stop(); $('#enrich').hidden = true; toast('Paused. Open the menu to continue.'); }
+  else if (a === 'more') startEnrichment(true);
+  else if (a === 'reanalyse') reanalyse();
+  else if (a === 'about') $('#about').showModal();
+  else if (a === 'update') checkUpdate();
+  else if (a === 'delete') {
+    if (confirm('Delete all your listening data from this browser? You can import your export again at any time.')) {
+      if (ENR) ENR.stop();
+      await STORE.clearAll();
+      location.href = location.pathname;
+    }
+  }
+}
+
+// ---------- start ----------
+function bindLanding() {
+  const drop = $('#drop'), input = $('#file');
+  $('#pickBtn').onclick = () => input.click();
+  input.onchange = () => { const f = input.files; if (f && f.length) importFiles(f); input.value = ''; };
+  for (const ev of ['dragenter', 'dragover']) drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); });
+  for (const ev of ['dragleave', 'drop']) drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); });
+  drop.addEventListener('drop', (e) => { if (e.dataTransfer && e.dataTransfer.files.length) importFiles(e.dataTransfer.files); });
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('drop', (e) => e.preventDefault());
+  $('#demoBtn').onclick = () => { location.href = location.pathname + '?demo=1'; };
+  $('#backBtn').onclick = () => startApp('local').catch((e) => showImportError(e.message));
+  $('#menuBtn').onclick = (e) => { e.stopPropagation(); const m = $('#menu'); if (m.hidden) buildMenu(); m.hidden = !m.hidden; };
+  $('#enrich').onclick = (e) => { e.stopPropagation(); buildMenu(); $('#menu').hidden = false; };
+  document.addEventListener('click', (e) => { if (!e.target.closest('#menu')) $('#menu').hidden = true; });
+  $('#aboutClose').onclick = () => $('#about').close();
+}
+(async function init() {
+  $('#ver').textContent = 'v' + APP_VERSION;
+  $('#ver').onclick = () => toast(`v${APP_VERSION} · ${diag().text}`, 8000);
+  bindLanding();
+  try { STORE = await import('./store.js'); }
+  catch (e) { showLanding(); showImportError('This browser could not load the app. Try a current version of Chrome, Safari, Edge or Firefox.'); return; }
+  if (QP.has('demo')) {
+    try { await startApp('demo'); } catch (e) { showLanding(); showImportError('Could not load the demo data.'); }
+    return;
+  }
+  let has = false;
+  try { has = !!(await STORE.get('summary')); }
+  catch (e) { showLanding(); showImportError('This browser does not allow local storage here (private browsing?). The app needs it to keep your data on your device.'); return; }
+  if (has) { try { await startApp('local'); return; } catch (e) { /* show the landing page instead */ } }
+  showLanding();
+})();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
